@@ -2,7 +2,7 @@
 # Objective    : Contains implementation of the model (EM-algorithm) and supporting functions
 # Created by   : Christian Tsoungui Obama, Kristan. A. Schneider
 # Created on   : 15.08.23
-# Last modified: 01.11.23
+# Last modified: 31.10.23
 
 calculateMaximumLikelihoodEstimatesWithAddOns <- function(dataset, numberOfAllelesAtEachMarker, idExists=TRUE, pluginValueOfLambda=NULL, isConfidenceInterval=FALSE, isBiasCorrection=FALSE, methodForBiasCorrection="bootstrap", numberOfBootstrapReplicatesBiasCorrection=10000, numberOfBootstrapReplicatesConfidenceInterval=10000, significanceLevel=0.05){
   ### Dropping Missing data in dataset
