@@ -2,7 +2,7 @@
 # Objective    : Contains implementation of the model (EM-algorithm) and supporting functions
 # Created by   : Christian Tsoungui Obama, Kristan. A. Schneider
 # Created on   : 15.08.23
-# Last modified: 31.10.23
+# Last modified: 01.11.23
 
 calculateMaximumLikelihoodEstimatesWithAddOns <- function(dataset, numberOfAllelesAtEachMarker, idExists=TRUE, pluginValueOfLambda=NULL, isConfidenceInterval=FALSE, isBiasCorrection=FALSE, methodForBiasCorrection="bootstrap", numberOfBootstrapReplicatesBiasCorrection=10000, numberOfBootstrapReplicatesConfidenceInterval=10000, significanceLevel=0.05){
   ### Dropping Missing data in dataset
@@ -132,68 +132,10 @@ calculateMaximumLikelihoodEstimatesWithPluginValueOfLambda <- function(dataset,n
   tolerance <- 10^-8 # Error tolerance
   detectedObservations             <- dataset[[1]]
   numberOfEachDetectedObservations <- dataset[[2]]
-  #numberOfLoci  <- ncol(detectedObservations)
   subsetsFromDataset <- buildAllSetsAndSubsets(detectedObservations, numberOfAllelesAtEachMarker)
   numberOfDetectedObservations <- nrow(detectedObservations)
   Ax <- subsetsFromDataset[[1]]
   hapll <- subsetsFromDataset[[2]]
-  # x  <- detectedObservations
-  #
-  # # This calculates the list to pick proper haplotype freuencies, i.e. sets Ay
-  # hapll <- list()
-  # if(length(numberOfAllelesAtEachMarker)==1){
-  #   numberOfAllelesAtEachMarker <- rep(numberOfAllelesAtEachMarker,numberOfLoci)
-  # }else{
-  #   numberOfLoci <- length(numberOfAllelesAtEachMarker)
-  # }
-  # ggead <- c(1,cumprod(numberOfAllelesAtEachMarker[1:(numberOfLoci-1)]))
-  # Hx <- list()
-  # Ax <- list()
-  # alnum <- list()
-  # bin2num <- list()
-  # for(k in 1:numberOfLoci){
-  #   alnum[[k]] <- 1:numberOfAllelesAtEachMarker[[k]]
-  #   bin2num[[k]] <- 2^(0:(numberOfAllelesAtEachMarker[[k]]-1))
-  # }
-  # alcnt <- array(0,numberOfLoci)
-  # for(u in 1:numberOfDetectedObservations){
-  #   Hx[[u]] <- list(array(0,numberOfLoci),list(),list(),list(),list(),array(0,numberOfLoci))
-  #   Ax[[u]] <- list(list(),list(),list(),list())
-  #   for(k in 1:numberOfLoci){
-  #     temp  <- gead(x[u,k],2,numberOfAllelesAtEachMarker[[k]])
-  #     temp1 <- varsets1(temp)
-  #     Hx[[u]][[6]][k] <- nrow(temp1)-1
-  #     Hx[[u]][[1]][k]   <- sum(temp)
-  #     temp1 <- temp1[-1,]
-  #     Hx[[u]][[2]][[k]] <- (alnum[[k]])[temp*alnum[[k]]]
-  #     Hx[[u]][[3]][[k]] <- temp1
-  #     Hx[[u]][[4]][[k]] <- temp1%*%bin2num[[k]] # subsets of alleles
-  #     Hx[[u]][[5]][[k]] <- Hx[[u]][[3]][[k]]%*%rep(1,numberOfAllelesAtEachMarker[k]) # number of alleles in subset at locus k
-  #   }
-  #   vz1 <- sum(Hx[[u]][[1]])
-  #   temp2 <- prod(Hx[[u]][[6]])
-  #   Ax[[u]][[1]] <- temp2
-  #   Ax[[u]][[2]] <- varsets2(Hx[[u]][[6]])
-  #   for(k in 1:numberOfLoci){
-  #     Ax[[u]][[2]][,k] <- Hx[[u]][[4]][[k]][Ax[[u]][[2]][,k]]
-  #   }
-  #   for(j in 1:temp2){
-  #     Ax[[u]][[3]][[j]] <- list()
-  #     for(k in 1:numberOfLoci){
-  #       temp <- gead(Ax[[u]][[2]][j,k],2,numberOfAllelesAtEachMarker[[k]])
-  #       temp1 <- (alnum[[k]])[temp*alnum[[k]]]
-  #       alcnt[k] <- length(temp1)
-  #       Ax[[u]][[3]][[j]][[k]] <- temp1
-  #     }
-  #     Ax[[u]][[4]][[j]] <- varsets2(alcnt)
-  #     for(k in 1:numberOfLoci){
-  #       Ax[[u]][[4]][[j]][,k] <- Ax[[u]][[3]][[j]][[k]][Ax[[u]][[4]][[j]][,k]]
-  #     }
-  #     Ax[[u]][[4]][[j]] <- as.character((Ax[[u]][[4]][[j]]-1)%*%ggead+1)
-  #     Ax[[u]][[3]][[j]] <- (-1)^(vz1+sum(alcnt))
-  #   }
-  #   hapll[[u]] <- Ax[[u]][[4]][[temp2]]
-  # }
   hapl1 <- unique(unlist(hapll))
   # initialize parameters
   H <- length(hapl1)
@@ -272,7 +214,6 @@ calculateMaximumLikelihoodEstimates <- function(dataset,numberOfAllelesAtEachMar
     t <- t+1
     Ccoeff <- 0
     Bcoeff <- num0 #reset B coefficients to 0 in next iteration
-    #num <- num0  #reset numerator to 0 in next iteration
     for(u in 1:numberOfDetectedObservations){
       denom <- 0
       num <- num0
@@ -338,7 +279,6 @@ buildBootstrappedDataset <- function(){
   bootstrappedDataset <- detectedObservations[rep(observation,bootstrappedSamples),]
   bootstrappedListOfDatasets  <- convertToListOfDatasets(bootstrappedDataset, idExists=FALSE)
   bootstrappedListOfDatasets
-  #calculateMaximumLikelihoodEstimatesWithOrWithoutPlugin(bootstrappedListOfDatasets, numberOfAllelesAtEachMarker, pluginValueOfLambda=pluginValueOfLambda)
 }
 
 buildAllSetsAndSubsets <- function(detectedObservations, numberOfAllelesAtEachMarker){
@@ -376,7 +316,6 @@ buildAllSetsAndSubsets <- function(detectedObservations, numberOfAllelesAtEachMa
       Hx[[u]][[3]][[k]] <- temp1
       Hx[[u]][[4]][[k]] <- temp1%*%bin2num[[k]] # subsets of alleles
       Hx[[u]][[5]][[k]] <- Hx[[u]][[3]][[k]]%*%rep(1,numberOfAllelesAtEachMarker[k]) # number of alleles in subset at locus k
-      #Hx[[u]][[6]][k]   <- length(temp1%*%bin2num[[k]])
     }
     vz1 <- sum(Hx[[u]][[1]])
     temp2 <- prod(Hx[[u]][[6]])
