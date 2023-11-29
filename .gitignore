@@ -50,3 +50,6 @@ rsconnect/
 
 # Directories
 /.idea
+/userManual
+/forSimulation
+

@@ -6,7 +6,7 @@
 # Created on   : 27.10.23
 # Last modified: 01.11.23
 
-path <- "/Users/christian/Library/CloudStorage/GoogleDrive-christian.tsoungui@aims-cameroon.org/.shortcut-targets-by-id/1Ulru-DjbFRaMVB7Vj9tJ4NfyzPDkhzOr/Maths against Malaria/Christian/Models/FullGeneralModel"
+path <- "/Users/christian/Documents/phd/models/generalModel"
 
 # Load external resources
 source(paste0(path,'/src/model.R'))#("/home/janedoe/Documents/src/STRmodel.R")
@@ -22,7 +22,7 @@ library(openxlsx)
 ##################################
 
 ## Import the dataset
-datasetNaturalFormat <- read.xlsx(paste0(path,'/exampleDataset/exampleDatasetNaturalFormat.xlsx'), 1)
+datasetNaturalFormat <- read.xlsx(paste0(path,'/exampleDatasets/exampleDatasetNaturalFormat.xlsx'), 1)
 
 # Transform the data to the standard format
 datasetStandard <- convertDatasetToStandardFormat(datasetNaturalFormat, 2:ncol(datasetNaturalFormat))
@@ -40,19 +40,19 @@ calculateMaximumLikelihoodEstimatesWithAddOns(datasetStandard[[1]][,markers], da
 calculateMaximumLikelihoodEstimatesWithAddOns(datasetStandard[[1]][,markers], datasetStandard[[3]][markers], idExists = FALSE, pluginValueOfLambda = 1.0)
 
 # Finding MLEs (haplotype frequencies and MOI) with bootstrap bias-correction ('Bootstrap')
-calculateMaximumLikelihoodEstimatesWithAddOns(datasetStandard[[1]][,markers], datasetStandard[[3]][markers], idExists = FALSE, isBiasCorrection = TRUE, methodForBiasCorrection = "bootstrap", numberOfBootstrapReplicatesBiasCorrection = 15000)
+calculateMaximumLikelihoodEstimatesWithAddOns(datasetStandard[[1]][,markers], datasetStandard[[3]][markers], idExists = FALSE, isBiasCorrection = TRUE, methodForBiasCorrection = "bootstrap", numberOfBootstrapReplicatesBiasCorrection = 15)
 
 # Finding MLEs (haplotype frequencies and MOI) with bootstrap bias-correction ('jackknife') with plugin
-calculateMaximumLikelihoodEstimatesWithAddOns(datasetStandard[[1]][,markers], datasetStandard[[3]][markers], idExists = FALSE, pluginValueOfLambda = 1.0, isBiasCorrection = TRUE, methodForBiasCorrection = "jackknife")
+calculateMaximumLikelihoodEstimatesWithAddOns(datasetStandard[[1]][,markers], datasetStandard[[3]][markers], idExists = FALSE, isBiasCorrection = TRUE, methodForBiasCorrection = "jackknife")
 
-# Finding MLEs (haplotype frequencies and MOI) using a 95% confidence interval
-calculateMaximumLikelihoodEstimatesWithAddOns(datasetStandard[[1]][,markers], datasetStandard[[3]][markers], idExists = FALSE, isBiasCorrection = TRUE, methodForBiasCorrection = "bootstrap", numberOfBootstrapReplicatesBiasCorrection = 15000, isConfidenceInterval = TRUE, numberOfBootstrapReplicatesConfidenceInterval = 10000)
+# Finding MLEs (haplotype frequencies and MOI) using a 95% confidence interval and 15000 bootstrap replicates
+calculateMaximumLikelihoodEstimatesWithAddOns(datasetStandard[[1]][,markers], datasetStandard[[3]][markers], idExists = FALSE, isBiasCorrection = TRUE, methodForBiasCorrection = "bootstrap", numberOfBootstrapReplicatesBiasCorrection = 15000, isConfidenceInterval = TRUE, numberOfBootstrapReplicatesConfidenceInterval = 15)
 
 # Finding MLEs (haplotype frequencies and MOI) using a 90% confidence interval and 20000 bootstrap samples
-calculateMaximumLikelihoodEstimatesWithAddOns(datasetStandard[[1]][,markers], datasetStandard[[3]][markers], idExists = FALSE, isBiasCorrection = TRUE, methodForBiasCorrection = "bootstrap", numberOfBootstrapReplicatesBiasCorrection = 15000,  isConfidenceInterval = TRUE, numberOfBootstrapReplicatesConfidenceInterval = 20000, significanceLevel = 0.1)
+calculateMaximumLikelihoodEstimatesWithAddOns(datasetStandard[[1]][,markers], datasetStandard[[3]][markers], idExists = FALSE, isBiasCorrection = TRUE, methodForBiasCorrection = "jackknife", isConfidenceInterval = TRUE, numberOfBootstrapReplicatesConfidenceInterval = 15, significanceLevel = 0.10)
 
 # Finding pairwise LD between two loci. The function outputs the LD measures D', r-squared.
-markersPair <- c(4,4)
+markersPair <- c(1,4)
 calculatePairwiseLDWithAddons(datasetStandard,markersPair, idExists = FALSE)
 
 # Finding pairwise LD between two loci. The function outputs the LD measures D', r-squared using a 95% confidence interval
