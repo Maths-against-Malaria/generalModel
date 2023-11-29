@@ -45,14 +45,14 @@ calculateMaximumLikelihoodEstimatesWithAddOns(datasetStandard[[1]][,markers], da
 # Finding MLEs (haplotype frequencies and MOI) with bootstrap bias-correction ('jackknife') with plugin
 calculateMaximumLikelihoodEstimatesWithAddOns(datasetStandard[[1]][,markers], datasetStandard[[3]][markers], idExists = FALSE, isBiasCorrection = TRUE, methodForBiasCorrection = "jackknife")
 
-# Finding MLEs (haplotype frequencies and MOI) using a 95% confidence interval
-calculateMaximumLikelihoodEstimatesWithAddOns(datasetStandard[[1]][,markers], datasetStandard[[3]][markers], idExists = FALSE, isBiasCorrection = TRUE, methodForBiasCorrection = "bootstrap", numberOfBootstrapReplicatesBiasCorrection = 15000, isConfidenceInterval = TRUE, numberOfBootstrapReplicatesConfidenceInterval = 10000)
+# Finding MLEs (haplotype frequencies and MOI) using a 95% confidence interval and 15000 bootstrap replicates
+calculateMaximumLikelihoodEstimatesWithAddOns(datasetStandard[[1]][,markers], datasetStandard[[3]][markers], idExists = FALSE, isBiasCorrection = TRUE, methodForBiasCorrection = "bootstrap", numberOfBootstrapReplicatesBiasCorrection = 15000, isConfidenceInterval = TRUE, numberOfBootstrapReplicatesConfidenceInterval = 15)
 
 # Finding MLEs (haplotype frequencies and MOI) using a 90% confidence interval and 20000 bootstrap samples
-calculateMaximumLikelihoodEstimatesWithAddOns(datasetStandard[[1]][,markers], datasetStandard[[3]][markers], idExists = FALSE, isBiasCorrection = TRUE, methodForBiasCorrection = "bootstrap", numberOfBootstrapReplicatesBiasCorrection = 15000,  isConfidenceInterval = TRUE, numberOfBootstrapReplicatesConfidenceInterval = 20000, significanceLevel = 0.1)
+calculateMaximumLikelihoodEstimatesWithAddOns(datasetStandard[[1]][,markers], datasetStandard[[3]][markers], idExists = FALSE, isBiasCorrection = TRUE, methodForBiasCorrection = "jackknife", isConfidenceInterval = TRUE, numberOfBootstrapReplicatesConfidenceInterval = 15, significanceLevel = 0.10)
 
 # Finding pairwise LD between two loci. The function outputs the LD measures D', r-squared.
-markersPair <- c(4,4)
+markersPair <- c(1,4)
 calculatePairwiseLDWithAddons(datasetStandard,markersPair, idExists = FALSE)
 
 # Finding pairwise LD between two loci. The function outputs the LD measures D', r-squared using a 95% confidence interval

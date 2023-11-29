@@ -60,6 +60,7 @@ calculateMaximumLikelihoodEstimatesWithAddOns <- function(dataset, numberOfAllel
       names(lambdaEstimates) <- ''
     }
     frequenciesEstimatesWithConfidenceInterval <- cbind(frequenciesEstimates,perc[2:(numberOfDetectedHaplotypes+1),])
+    colnames(frequenciesEstimatesWithConfidenceInterval) <- c('', paste0(as.character((significanceLevel/2)*100), '%'), paste0(as.character((1-significanceLevel/2)*100), '%'))
     maximumLikelihoodEstimates <- list(lambdaEstimates, frequenciesEstimatesWithConfidenceInterval, mixRadixTableOfDetectedHaplotypes, sampleSizeWithNoMissingData)
     names(maximumLikelihoodEstimates) <- c('lambda', 'haplotypes_frequencies', 'detected_haplotypes', 'used_sample_size')
   }else{
@@ -110,8 +111,6 @@ calculateMaximuLikelihoodEstimatesWithBiasCorrection <- function(datasetNaturalF
           arrayOfJackknifedEstimates[1,sample]  <- unlist(jackknifedEstimates[[1]])
           arrayOfJackknifedEstimates[as.character(rnames),sample] <- unlist(jackknifedEstimates[[2]])
         }
-        #bias  <- (effectiveSampleSize - 1)*(rowMeans(arrayOfJackknifedEstimates) - c(maximumLikelihoodEstimates[[1]][1], maximumLikelihoodEstimates[[2]])) #arrayOfJackknifedEstimates %*% numberOfEachDetectedObservations/sampleSize
-        #bias[-1][isFrequenciesEstimatesCloseToZero] <- 0
         biasCorrectedEstimateOfLambda       <- effectiveSampleSize*maximumLikelihoodEstimates[[1]][1] - (effectiveSampleSize - 1)*maximumLikelihoodEstimates[[1]][1]
         biasCorrectedEstimateOfFrequencies  <- effectiveSampleSize*maximumLikelihoodEstimates[[2]] - (effectiveSampleSize - 1)*maximumLikelihoodEstimates[[2]]
       }else{
