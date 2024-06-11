@@ -4,12 +4,12 @@
 #                from genomic/molecular data
 # Created by   : Christian Tsoungui Obama
 # Created on   : 27.10.23
-# Last modified: 01.11.23
+# Last modified: 05.12.23
 
 path <- "/Users/christian/Documents/phd/models/generalModel"
 
 # Load external resources
-source(paste0(path,'/src/model.R'))#("/home/janedoe/Documents/src/STRmodel.R")
+source(paste0(path,'/src/model.R'))
 
 # Install the necessary packages if necessary
 #install.packages('openxlsx')   # Comment this line if openxlsx installed
@@ -20,40 +20,31 @@ library(openxlsx)
 #################################
 ### Import Datasets
 ##################################
-
-## Import the dataset
-datasetNaturalFormat <- read.xlsx(paste0(path,'/exampleDatasets/exampleDatasetNaturalFormat.xlsx'), 1)
+datasetNatural <- read.xlsx(paste0(path,'/exampleDatasets/dataset.xlsx'), 1)
 
 # Transform the data to the standard format
-datasetStandard <- convertDatasetToStandardFormat(datasetNaturalFormat, 2:ncol(datasetNaturalFormat))
+datasetStandard <- datasetToStandard(datasetNatural, 2:ncol(datasetNatural))
 
 #################################
 ### Estimate MLEs
 ##################################
-
-# Estimate MLEs
 ## Choose markers of interests
 markers <- 1:4
-calculateMaximumLikelihoodEstimatesWithAddOns(datasetStandard[[1]][,markers], datasetStandard[[3]][markers], idExists = FALSE)
+MLE(datasetStandard[[1]][,markers], datasetStandard[[3]][markers], idExists = FALSE)
 
 # Estimate MLEs with plugin estimate for MOI parameter
-calculateMaximumLikelihoodEstimatesWithAddOns(datasetStandard[[1]][,markers], datasetStandard[[3]][markers], idExists = FALSE, pluginValueOfLambda = 1.0)
+MLE(datasetStandard[[1]][,markers], datasetStandard[[3]][markers], idExists = FALSE, plugin = 1.0)
 
-# Finding MLEs (haplotype frequencies and MOI) with bootstrap bias-correction ('Bootstrap')
-calculateMaximumLikelihoodEstimatesWithAddOns(datasetStandard[[1]][,markers], datasetStandard[[3]][markers], idExists = FALSE, isBiasCorrection = TRUE, methodForBiasCorrection = "bootstrap", numberOfBootstrapReplicatesBiasCorrection = 15)
+# Finding MLEs (haplotype frequencies and MOI) with bootstrap bias-correction
+MLE(datasetStandard[[1]][,markers], datasetStandard[[3]][markers], idExists = FALSE, isBC = TRUE, replBC = 15000)
 
-# Finding MLEs (haplotype frequencies and MOI) with bootstrap bias-correction ('jackknife') with plugin
-calculateMaximumLikelihoodEstimatesWithAddOns(datasetStandard[[1]][,markers], datasetStandard[[3]][markers], idExists = FALSE, isBiasCorrection = TRUE, methodForBiasCorrection = "jackknife")
-
-# Finding MLEs (haplotype frequencies and MOI) using a 95% confidence interval and 15000 bootstrap replicates
-calculateMaximumLikelihoodEstimatesWithAddOns(datasetStandard[[1]][,markers], datasetStandard[[3]][markers], idExists = FALSE, isBiasCorrection = TRUE, methodForBiasCorrection = "bootstrap", numberOfBootstrapReplicatesBiasCorrection = 15000, isConfidenceInterval = TRUE, numberOfBootstrapReplicatesConfidenceInterval = 15)
-
-# Finding MLEs (haplotype frequencies and MOI) using a 90% confidence interval and 20000 bootstrap samples
-calculateMaximumLikelihoodEstimatesWithAddOns(datasetStandard[[1]][,markers], datasetStandard[[3]][markers], idExists = FALSE, isBiasCorrection = TRUE, methodForBiasCorrection = "jackknife", isConfidenceInterval = TRUE, numberOfBootstrapReplicatesConfidenceInterval = 15, significanceLevel = 0.10)
+# Finding MLEs (haplotype frequencies and MOI) using a 90% confidence interval and 15000 bootstrap replicates
+MLE(datasetStandard[[1]][,markers], datasetStandard[[3]][markers], idExists = FALSE, isCI = TRUE, replCI = 15000, alpha = 0.10)
 
 # Finding pairwise LD between two loci. The function outputs the LD measures D', r-squared.
-markersPair <- c(1,4)
-calculatePairwiseLDWithAddons(datasetStandard,markersPair, idExists = FALSE)
 
-# Finding pairwise LD between two loci. The function outputs the LD measures D', r-squared using a 95% confidence interval
-calculatePairwiseLDWithAddons(datasetStandard,markersPair, idExists = FALSE, isConfidenceInterval=TRUE,numberOfBootstrapReplicatesConfidenceInterval=100, significanceLevel=0.05)
+pairwiseLD(datasetStandard, markersPair, idExists = FALSE)
+
+# Finding pairwise LD between two loci (,i.e., at 1st and 4th column), using D' and r-squared with a 95% confidence interval
+markersPair <- c(1,4)
+pairwiseLD(datasetStandard, markersPair, idExists = FALSE, isCI=TRUE, replCI = 20000, alpha=0.10)

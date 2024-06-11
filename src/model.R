@@ -2,143 +2,124 @@
 # Objective    : Contains implementation of the model (EM-algorithm) and supporting functions
 # Created by   : Christian Tsoungui Obama, Kristan. A. Schneider
 # Created on   : 15.08.23
-# Last modified: 29.11.23
+# Last modified : 28.12.23
 
-calculateMaximumLikelihoodEstimatesWithAddOns <- function(dataset, numberOfAllelesAtEachMarker, idExists=TRUE, pluginValueOfLambda=NULL, isConfidenceInterval=FALSE, isBiasCorrection=FALSE, methodForBiasCorrection="bootstrap", numberOfBootstrapReplicatesBiasCorrection=10000, numberOfBootstrapReplicatesConfidenceInterval=10000, significanceLevel=0.05){
+MLE <- function(dataset, n_marker, idExists=TRUE, plugin=NULL, isCI=FALSE, isBC=FALSE, replBC=10000, replCI=10000, alpha=0.05){
   ### Dropping Missing data in dataset
   samplesWithMissingData <- rowSums(dataset == 0) > 0
   dataset <- dataset[!samplesWithMissingData,]
 
   ### Actual sample size
   sampleSizeWithNoMissingData <- nrow(dataset)
-  listOfDatasets  <- convertToListOfDatasets(dataset, idExists=idExists)
-  detectedObservations <<- listOfDatasets[[1]]
-  numberOfEachDetectedObservations <- listOfDatasets[[2]]
-  numberOfLoci <- ncol(detectedObservations)
+  listOfDatasets  <- datasetXNx(dataset, idExists=idExists)
+  obs <<- listOfDatasets[[1]]
+  nObsVec <- listOfDatasets[[2]]
+  nLoci <- ncol(obs)
 
   # MLEs
-  maximumLikelihoodEstimates <- calculateMaximuLikelihoodEstimatesWithBiasCorrection(dataset, numberOfAllelesAtEachMarker, isBiasCorrection=isBiasCorrection, methodForBiasCorrection=methodForBiasCorrection, numberOfBootstrapReplicatesBiasCorrection=numberOfBootstrapReplicatesBiasCorrection, pluginValueOfLambda=pluginValueOfLambda)
-  mixRadixBaseCumulativeProduct <- c(1, cumprod(numberOfAllelesAtEachMarker)[1:(numberOfLoci-1)])
-  frequenciesEstimates <- maximumLikelihoodEstimates[[2]]
-  lambdaEstimates <- maximumLikelihoodEstimates[[1]]
+  mle <- MLEBC(dataset, n_marker, isBC=isBC, replBC=replBC, plugin=plugin)
+  mixRadixBaseCumulativeProduct <- c(1, cumprod(n_marker)[1:(nLoci-1)])
+  frequenciesEstimates <- mle[[2]]
+  lbdaEstim <- mle[[1]]
   rnames1 <- as.integer(rownames(frequenciesEstimates)) - 1
   rnames  <- rnames1
   nh <- length(rnames)
-  mixRadixTableOfDetectedHaplotypes <- array(0,c(nh,numberOfLoci))
-  for(k in 1:numberOfLoci){ #for each locus
+  mixRadixTableOfHap <- array(0,c(nh,nLoci))
+  for(k in 1:nLoci){ #for each locus
     re <- rnames%%rev(mixRadixBaseCumulativeProduct)[k]
-    mixRadixTableOfDetectedHaplotypes[,(numberOfLoci-k+1)] <- (rnames-re)/rev(mixRadixBaseCumulativeProduct)[k]
+    mixRadixTableOfHap[,(nLoci-k+1)] <- (rnames-re)/rev(mixRadixBaseCumulativeProduct)[k]
     rnames <- re
   }
-  mixRadixTableOfDetectedHaplotypes <- mixRadixTableOfDetectedHaplotypes+1
+  mixRadixTableOfHap <- mixRadixTableOfHap+1
   for(i in 1:nh){
-    rnames[i] <- paste(mixRadixTableOfDetectedHaplotypes[i,], collapse = '')
+    rnames[i] <- paste(mixRadixTableOfHap[i,], collapse = '')
   }
   rownames(frequenciesEstimates) <- rnames
 
   # Bootstrap CIs
-  if(isConfidenceInterval){
-    numberOfDetectedHaplotypes  <- length(frequenciesEstimates)
-    sampleSize <<- sum(numberOfEachDetectedObservations)
-    probabilityOfEachObservation  <<- numberOfEachDetectedObservations/sampleSize
-    arrayOfBootstrappedEstimates <- array(0, dim = c((numberOfDetectedHaplotypes+1), numberOfBootstrapReplicatesConfidenceInterval=numberOfBootstrapReplicatesConfidenceInterval))
-    rownames(arrayOfBootstrappedEstimates) <- c('lambda',(rnames1+1))
-    observation <<- seq_along(numberOfEachDetectedObservations)
-    for (bootstrapReplicate in 1:numberOfBootstrapReplicatesConfidenceInterval){
-      bootstrappedListOfDatasets <- buildBootstrappedDataset()
-      bootstrappedEstimates <- calculateMaximumLikelihoodEstimatesWithOrWithoutPlugin(bootstrappedListOfDatasets, numberOfAllelesAtEachMarker, pluginValueOfLambda=pluginValueOfLambda)
-      detectedHaplotypes    <- as.integer(rownames(bootstrappedEstimates[[2]]))
-      arrayOfBootstrappedEstimates[1,bootstrapReplicate]  <- unlist(bootstrappedEstimates[[1]])
-      arrayOfBootstrappedEstimates[as.character(detectedHaplotypes),bootstrapReplicate] <- unlist(bootstrappedEstimates[[2]])
+  if(isCI){
+    nHap  <- length(frequenciesEstimates)
+    N <<- sum(nObsVec)
+    probaObs  <<- nObsVec/N
+    arrayBootEstim <- array(0, dim = c((nHap+1), replCI=replCI))
+    rownames(arrayBootEstim) <- c('lambda',(rnames1+1))
+    observation <<- seq_along(nObsVec)
+    for (bootRepl in 1:replCI){
+      bootstrappedListOfDatasets <- bootstrapDataset()
+      bootEstim <- MLEPluginChoice(bootstrappedListOfDatasets, n_marker, plugin=plugin)
+      hap    <- as.integer(rownames(bootEstim[[2]]))
+      arrayBootEstim[1,bootRepl]  <- unlist(bootEstim[[1]])
+      arrayBootEstim[as.character(hap),bootRepl] <- unlist(bootEstim[[2]])
     }
-    perc <- t(apply(arrayOfBootstrappedEstimates, 1, quantile, c(significanceLevel/2, (1-significanceLevel/2))))
-    if(is.null(pluginValueOfLambda)){
-      lambdaEstimates <- c(unlist(maximumLikelihoodEstimates[[1]]), perc[1,])
-      names(lambdaEstimates) <- c('', paste0(as.character((significanceLevel/2)*100), '%'), paste0(as.character((1-significanceLevel/2)*100), '%'))
+    perc <- t(apply(arrayBootEstim, 1, quantile, c(alpha/2, (1-alpha/2))))
+    if(is.null(plugin)){
+      lbdaEstim <- c(unlist(mle[[1]]), perc[1,])
+      names(lbdaEstim) <- c('', paste0(as.character((alpha/2)*100), '%'), paste0(as.character((1-alpha/2)*100), '%'))
     }else{
-      lambdaEstimates <- maximumLikelihoodEstimates[[1]]
-      names(lambdaEstimates) <- ''
+      lbdaEstim <- mle[[1]]
+      names(lbdaEstim) <- ''
     }
-    frequenciesEstimatesWithConfidenceInterval <- cbind(frequenciesEstimates,perc[2:(numberOfDetectedHaplotypes+1),])
-    colnames(frequenciesEstimatesWithConfidenceInterval) <- c('', paste0(as.character((significanceLevel/2)*100), '%'), paste0(as.character((1-significanceLevel/2)*100), '%'))
-    maximumLikelihoodEstimates <- list(lambdaEstimates, frequenciesEstimatesWithConfidenceInterval, mixRadixTableOfDetectedHaplotypes, sampleSizeWithNoMissingData)
-    names(maximumLikelihoodEstimates) <- c('lambda', 'haplotypes_frequencies', 'detected_haplotypes', 'used_sample_size')
+    freqEstimCI <- cbind(frequenciesEstimates,perc[2:(nHap+1),])
+    colnames(freqEstimCI) <- c('', paste0(as.character((alpha/2)*100), '%'), paste0(as.character((1-alpha/2)*100), '%'))
+    mle <- list(lbdaEstim, freqEstimCI, mixRadixTableOfHap, sampleSizeWithNoMissingData)
+    names(mle) <- c('lambda', 'haplotypes_frequencies', 'detected_haplotypes', 'used_sample_size')
   }else{
-    maximumLikelihoodEstimates <- list(lambdaEstimates, frequenciesEstimates, mixRadixTableOfDetectedHaplotypes, sampleSizeWithNoMissingData)
-    names(maximumLikelihoodEstimates) <- c('lambda', 'haplotypes_frequencies', 'detected_haplotypes', 'used_sample_size')
+    mle <- list(lbdaEstim, frequenciesEstimates, mixRadixTableOfHap, sampleSizeWithNoMissingData)
+    names(mle) <- c('lambda', 'haplotypes_frequencies', 'detected_haplotypes', 'used_sample_size')
   }
-  maximumLikelihoodEstimates
+  mle
 }
 
-calculateMaximuLikelihoodEstimatesWithBiasCorrection <- function(datasetNaturalFormat, numberOfAllelesAtEachMarker, isBiasCorrection=FALSE, methodForBiasCorrection='bootstrap', numberOfBootstrapReplicatesBiasCorrection=10000, pluginValueOfLambda=NULL){
+MLEBC <- function(datasetNaturalFormat, n_marker, isBC=FALSE, replBC=10000, plugin=NULL){
   isMissingData <- rowSums(datasetNaturalFormat == 0) == 0
   datasetNaturalFormat <<- datasetNaturalFormat[isMissingData,]
-  effectiveSampleSize <- nrow(datasetNaturalFormat)
-  dataset <- convertToListOfDatasets(datasetNaturalFormat, idExists = FALSE)
-  maximumLikelihoodEstimates <- calculateMaximumLikelihoodEstimatesWithOrWithoutPlugin(dataset, numberOfAllelesAtEachMarker, pluginValueOfLambda=pluginValueOfLambda)
-  detectedHaplotypes <- as.integer(rownames(maximumLikelihoodEstimates[[2]])) - 1
-  numberOfHaplotypes <- length(maximumLikelihoodEstimates[[2]])
-  detectedObservations <<- dataset[[1]]
-  numberOfEachDetectedObservations  <<- dataset[[2]]
-  isFrequenciesEstimatesCloseToZero <- round(maximumLikelihoodEstimates[[2]],2)==0
-  if(isBiasCorrection){
-    sampleSize <<- sum(numberOfEachDetectedObservations)
-    if(methodForBiasCorrection == "bootstrap"){
-      probabilityOfEachObservation <<- numberOfEachDetectedObservations/sampleSize
-      arrayOfBootstrappedEstimates <- array(0, dim = c((numberOfHaplotypes+1), numberOfBootstrapReplicatesBiasCorrection))
-      rownames(arrayOfBootstrappedEstimates) <- c('lambda',(detectedHaplotypes+1))
-      observation <<- seq_along(numberOfEachDetectedObservations)
-      for (bootstrapReplicate in seq(numberOfBootstrapReplicatesBiasCorrection)){
-        bootstrappedListOfDatasets <- buildBootstrappedDataset()
-        bootstrappedEstimates <- calculateMaximumLikelihoodEstimatesWithOrWithoutPlugin(bootstrappedListOfDatasets, numberOfAllelesAtEachMarker, pluginValueOfLambda=pluginValueOfLambda)
-        detectedHaplotypes   <- as.integer(rownames(bootstrappedEstimates[[2]]))
-        arrayOfBootstrappedEstimates[1,bootstrapReplicate] <- unlist(bootstrappedEstimates[[1]])
-        tempBootstrappedFrequenciesEstimates <- unlist(bootstrappedEstimates[[2]])
-        arrayOfBootstrappedEstimates[as.character(detectedHaplotypes),bootstrapReplicate] <- tempBootstrappedFrequenciesEstimates/sum(tempBootstrappedFrequenciesEstimates)
-      }
-      meanValueOfEstimates <- rowSums(arrayOfBootstrappedEstimates)/numberOfBootstrapReplicatesBiasCorrection
-      meanValueOfEstimates[-1][isFrequenciesEstimatesCloseToZero] <- 0
-      biasCorrectedEstimateOfLambda      <- 2*maximumLikelihoodEstimates[[1]][1] - meanValueOfEstimates[1]
-      biasCorrectedEstimateOfFrequencies <- 2*maximumLikelihoodEstimates[[2]] - meanValueOfEstimates[-1]
-    }else{
-      if(methodForBiasCorrection=="jackknife"){
-        numberOfDistinctObservations <- length(numberOfEachDetectedObservations)
-        arrayOfJackknifedEstimates <- array(0, dim = c((numberOfHaplotypes+1), effectiveSampleSize))
-        rownames(arrayOfJackknifedEstimates) <- c('lambda',(detectedHaplotypes+1))
-        for(sample in 1:effectiveSampleSize){
-          jackknifedEstimates <- calculateJackknifedEstimates(sample,numberOfAllelesAtEachMarker, pluginValueOfLambda=pluginValueOfLambda)
-          rnames <- as.integer(rownames(jackknifedEstimates[[2]]))
-          arrayOfJackknifedEstimates[1,sample]  <- unlist(jackknifedEstimates[[1]])
-          arrayOfJackknifedEstimates[as.character(rnames),sample] <- unlist(jackknifedEstimates[[2]])
-        }
-        biasCorrectedEstimateOfLambda       <- effectiveSampleSize*maximumLikelihoodEstimates[[1]][1] - (effectiveSampleSize - 1)*maximumLikelihoodEstimates[[1]][1]
-        biasCorrectedEstimateOfFrequencies  <- effectiveSampleSize*maximumLikelihoodEstimates[[2]] - (effectiveSampleSize - 1)*maximumLikelihoodEstimates[[2]]
-      }else{
-        warning("method needs to be either bootstrap or jackknife")
-      }
+  NEff <- nrow(datasetNaturalFormat)
+  dataset <- datasetXNx(datasetNaturalFormat, idExists = FALSE)
+  mle <- MLEPluginChoice(dataset, n_marker, plugin=plugin)
+  hap <- as.numeric(rownames(mle[[2]])) - 1
+  nHaplotypes <- length(mle[[2]])
+  obs <<- dataset[[1]]
+  nObsVec  <<- dataset[[2]]
+  isFreqZero <- round(mle[[2]],2)==0
+  if(isBC){
+    N <<- sum(nObsVec)
+    probaObs <<- nObsVec/N
+    arrayBootEstim <- array(0, dim = c((nHaplotypes+1), replBC))
+    rownames(arrayBootEstim) <- c('lambda',(hap+1))
+    for(bootRepl in seq(replBC)){
+      bootDataset <- bootstrapDataset()
+      bootEstim <- MLEPluginChoice(bootDataset, n_marker, plugin=plugin)
+      hapl   <- as.numeric(rownames(bootEstim[[2]]))
+      arrayBootEstim[1,bootRepl] <- unlist(bootEstim[[1]])
+      tempBootFreqEstim <- unlist(bootEstim[[2]])
+      arrayBootEstim[as.character(hapl),bootRepl] <- tempBootFreqEstim
     }
-    biasCorrectedEstimates <- list(biasCorrectedEstimateOfLambda, biasCorrectedEstimateOfFrequencies)
+    meanValueOfEstimates <- rowSums(arrayBootEstim)/replBC
+    meanValueOfEstimates[-1][isFreqZero] <- 0
+    BCLambda      <- 2*mle[[1]][1] - meanValueOfEstimates[1]
+    BCFrequencies <- 2*mle[[2]] - meanValueOfEstimates[-1]
+    biasCorrectedEstimates <- list(BCLambda, BCFrequencies)
   }else{
-    biasCorrectedEstimates <- maximumLikelihoodEstimates
+    biasCorrectedEstimates <- mle
   }
   biasCorrectedEstimates
 }
 
-calculateMaximumLikelihoodEstimatesWithOrWithoutPlugin <- function(dataset, numberOfAllelesAtEachMarker, pluginValueOfLambda=NULL){
-  if(is.null(pluginValueOfLambda)){
-    out <- calculateMaximumLikelihoodEstimates(dataset, numberOfAllelesAtEachMarker)               # calculates the uncorrected estimate
+MLEPluginChoice <- function(dataset, n_marker, plugin=NULL){
+  if(is.null(plugin)){
+    out <- baseModel(dataset, n_marker)               # calculates the uncorrected estimate
   }else{
-    out <- calculateMaximumLikelihoodEstimatesWithPluginValueOfLambda(dataset, numberOfAllelesAtEachMarker, pluginValueOfLambda) # calculates the corrected estimate
+    out <- MLEPlugin(dataset, n_marker, plugin=plugin) # calculates the corrected estimate
   }
   out
 }
 
-calculateMaximumLikelihoodEstimatesWithPluginValueOfLambda <- function(dataset,numberOfAllelesAtEachMarker,lambda){
+MLEPlugin <- function(dataset,n_marker,plugin){
   tolerance <- 10^-8 # Error tolerance
-  detectedObservations             <- dataset[[1]]
-  numberOfEachDetectedObservations <- dataset[[2]]
-  subsetsFromDataset <- buildAllSetsAndSubsets(detectedObservations, numberOfAllelesAtEachMarker)
-  numberOfDetectedObservations <- nrow(detectedObservations)
+  obs <- dataset[[1]]
+  nObsVec <- dataset[[2]]
+  subsetsFromDataset <- modelSubsets(obs, n_marker)
+  nObs <- nrow(obs)
   Ax <- subsetsFromDataset[[1]]
   hapll <- subsetsFromDataset[[2]]
   hapl1 <- unique(unlist(hapll))
@@ -150,7 +131,7 @@ calculateMaximumLikelihoodEstimatesWithPluginValueOfLambda <- function(dataset,n
   #initial list#
   num0 <- pp*0
   cond1 <- 1  ## condition to stop EM alg!
-  la <- lambda
+  la <- plugin
   num <- num0
   rownames(num) <- hapl1
   Bcoeff <- num0
@@ -159,7 +140,7 @@ calculateMaximumLikelihoodEstimatesWithPluginValueOfLambda <- function(dataset,n
   while(cond1>tolerance){
     Ccoeff <- 0
     Bcoeff <- num0 #reset B coefficients to 0 in next iteration
-    for(u in 1:numberOfDetectedObservations){
+    for(u in 1:nObs){
       denom <- 0
       num <- num0
       CC <- 0
@@ -173,7 +154,7 @@ calculateMaximumLikelihoodEstimatesWithPluginValueOfLambda <- function(dataset,n
         CC <- CC + exlap*p
       }
       num <- num*pp
-      denom <- numberOfEachDetectedObservations[u]/denom
+      denom <- nObsVec[u]/denom
       denom <- la*denom
       Ccoeff <- Ccoeff + CC*denom
       Bcoeff <- Bcoeff + num*denom
@@ -188,13 +169,13 @@ calculateMaximumLikelihoodEstimatesWithPluginValueOfLambda <- function(dataset,n
   out
 }
 
-calculateMaximumLikelihoodEstimates <- function(dataset,numberOfAllelesAtEachMarker){
+baseModel <- function(dataset,n_marker){
   tolerance <- 10^-8 # Error tolerance
-  detectedObservations             <- dataset[[1]]
-  numberOfEachDetectedObservations <- dataset[[2]]
-  sampleSize <- sum(numberOfEachDetectedObservations)
-  subsetsFromDataset <- buildAllSetsAndSubsets(detectedObservations, numberOfAllelesAtEachMarker)
-  numberOfDetectedObservations <- nrow(detectedObservations)
+  obs     <- dataset[[1]]
+  nObsVec <- dataset[[2]]
+  N <- sum(nObsVec)
+  subsetsFromDataset <- modelSubsets(obs, n_marker)
+  nObs <- nrow(obs)
   Ax <- subsetsFromDataset[[1]]
   hapll <- subsetsFromDataset[[2]]
   hapl1 <- unique(unlist(hapll))
@@ -214,12 +195,12 @@ calculateMaximumLikelihoodEstimates <- function(dataset,numberOfAllelesAtEachMar
   rownames(Bcoeff) <- hapl1
   t <- 0
   globalNumberOfIterations <- 500
-  numberOfIterationsLambda <- 300
+  nIterationsLambda <- 300
   while(cond1>tolerance && t<globalNumberOfIterations){
     t <- t+1
     Ccoeff <- 0
     Bcoeff <- num0 #reset B coefficients to 0 in next iteration
-    for(u in 1:numberOfDetectedObservations){
+    for(u in 1:nObs){
       denom <- 0
       num <- num0
       CC <- 0
@@ -233,12 +214,12 @@ calculateMaximumLikelihoodEstimates <- function(dataset,numberOfAllelesAtEachMar
         CC <- CC + exlap*p
       }
       num <- num*pp
-      denom <- numberOfEachDetectedObservations[u]/denom
+      denom <- nObsVec[u]/denom
       denom <- la*denom
       Ccoeff <- Ccoeff + CC*denom
       Bcoeff <- Bcoeff + num*denom
     }
-    Ccoeff <- Ccoeff/sampleSize
+    Ccoeff <- Ccoeff/N
 
     # Replacing NaN's in Ak by 0
     cnt <- sum(is.nan(Bcoeff))
@@ -252,11 +233,11 @@ calculateMaximumLikelihoodEstimates <- function(dataset,numberOfAllelesAtEachMar
     cond2 <- 1
     xt    <- Ccoeff   ### good initial condition
     tau   <- 0
-    while(cond2 > tolerance && tau < numberOfIterationsLambda){
+    while(cond2 > tolerance && tau < nIterationsLambda){
       tau <- tau + 1
       ex  <- exp(-xt)
       xtn <- xt + (1-ex)*(xt + Ccoeff*ex - Ccoeff)/(ex*xt+ex-1)
-      if(is.nan(xtn) || (tau == (numberOfIterationsLambda-1)) || xtn < 0){
+      if(is.nan(xtn) || (tau == (nIterationsLambda-1)) || xtn < 0){
         xtn <- runif(1, 0.1, 2.5)
       }
       cond2 <- abs(xtn-xt)
@@ -272,46 +253,40 @@ calculateMaximumLikelihoodEstimates <- function(dataset,numberOfAllelesAtEachMar
   out
 }
 
-calculateJackknifedEstimates <- function(sample, numberOfAllelesAtEachMarker, pluginValueOfLambda=pluginValueOfLambda){
-  dataset <- datasetNaturalFormat[-sample,]
-  jacknifedListOfDatasets <- convertToListOfDatasets(dataset, idExists = FALSE)
-  calculateMaximumLikelihoodEstimatesWithOrWithoutPlugin(jacknifedListOfDatasets, numberOfAllelesAtEachMarker, pluginValueOfLambda=pluginValueOfLambda)
+bootstrapDataset <- function(){
+  bootSamples <- rmultinom(1, N, probaObs)
+  bootDataset <- obs[rep(1:nrow(obs),bootSamples),]
+  bootDataset  <- datasetXNx(bootDataset, idExists=FALSE)
+  bootDataset
 }
 
-buildBootstrappedDataset <- function(){
-  bootstrappedSamples <- rmultinom(1, sampleSize, probabilityOfEachObservation)
-  bootstrappedDataset <- detectedObservations[rep(observation,bootstrappedSamples),]
-  bootstrappedListOfDatasets  <- convertToListOfDatasets(bootstrappedDataset, idExists=FALSE)
-  bootstrappedListOfDatasets
-}
-
-buildAllSetsAndSubsets <- function(detectedObservations, numberOfAllelesAtEachMarker){
-  numberOfDetectedObservations <- nrow(detectedObservations)
-  n  <- ncol(detectedObservations)
-  x  <- detectedObservations
+modelSubsets <- function(obs, n_marker){
+  nObs <- nrow(obs)
+  n  <- ncol(obs)
+  x  <- obs
   #_____________________________
   # this calculates the list to pick proper haplotype freuencies, i.e. sets Ay
   hapll <- list()
-  if(length(numberOfAllelesAtEachMarker)==1){
-    numberOfAllelesAtEachMarker <- rep(numberOfAllelesAtEachMarker,n)
+  if(length(n_marker)==1){
+    n_marker <- rep(n_marker,n)
   }else{
-    n <- length(numberOfAllelesAtEachMarker)
+    n <- length(n_marker)
   }
-  ggead <- c(1,cumprod(numberOfAllelesAtEachMarker[1:(n-1)]))
+  ggead <- c(1,cumprod(n_marker[1:(n-1)]))
   Hx <- list()
   Ax <- list()
   alnum <- list()
   bin2num <- list()
   for(k in 1:n){
-    alnum[[k]] <- 1:numberOfAllelesAtEachMarker[[k]]
-    bin2num[[k]] <- 2^(0:(numberOfAllelesAtEachMarker[[k]]-1))
+    alnum[[k]] <- 1:n_marker[[k]]
+    bin2num[[k]] <- 2^(0:(n_marker[[k]]-1))
   }
   alcnt <- array(0,n)
-  for(u in 1:numberOfDetectedObservations){
+  for(u in 1:nObs){
     Hx[[u]] <- list(array(0,n),list(),list(),list(),list(),array(0,n))
     Ax[[u]] <- list(list(),list(),list(),list())
     for(k in 1:n){
-      temp  <- gead(x[u,k],2,numberOfAllelesAtEachMarker[[k]])
+      temp  <- gead(x[u,k],2,n_marker[[k]])
       temp1 <- varsets1(temp) #varsets1(temp+1)[-1,]
       Hx[[u]][[6]][k] <- nrow(temp1)-1
       Hx[[u]][[1]][k]   <- sum(temp)
@@ -319,7 +294,7 @@ buildAllSetsAndSubsets <- function(detectedObservations, numberOfAllelesAtEachMa
       Hx[[u]][[2]][[k]] <- (alnum[[k]])[temp*alnum[[k]]]
       Hx[[u]][[3]][[k]] <- temp1
       Hx[[u]][[4]][[k]] <- temp1%*%bin2num[[k]] # subsets of alleles
-      Hx[[u]][[5]][[k]] <- Hx[[u]][[3]][[k]]%*%rep(1,numberOfAllelesAtEachMarker[k]) # number of alleles in subset at locus k
+      Hx[[u]][[5]][[k]] <- Hx[[u]][[3]][[k]]%*%rep(1,n_marker[k]) # number of alleles in subset at locus k
     }
     vz1 <- sum(Hx[[u]][[1]])
     temp2 <- prod(Hx[[u]][[6]])
@@ -331,7 +306,7 @@ buildAllSetsAndSubsets <- function(detectedObservations, numberOfAllelesAtEachMa
     for(j in 1:temp2){
       Ax[[u]][[3]][[j]] <- list()
       for(k in 1:n){
-        temp <- gead(Ax[[u]][[2]][j,k],2,numberOfAllelesAtEachMarker[[k]])
+        temp <- gead(Ax[[u]][[2]][j,k],2,n_marker[[k]])
         temp1 <- (alnum[[k]])[temp*alnum[[k]]]
         alcnt[k] <- length(temp1)
         Ax[[u]][[3]][[j]][[k]] <- temp1
@@ -348,57 +323,56 @@ buildAllSetsAndSubsets <- function(detectedObservations, numberOfAllelesAtEachMa
   list(Ax,hapll)
 }
 
-convertToListOfDatasets <- function(dataset, idExists = TRUE){
+datasetXNx <- function(dataset, idExists = TRUE){
   # Drop id column
   if(idExists){
     dataset <- dataset[,-1]
   }
   data.comp <- apply(dataset,1,function(x) paste(x,collapse="-"))
-  numberOfEachDetectedObservations <- table(data.comp)
-  numberOfEachDetectedObservations.names <- names(numberOfEachDetectedObservations)
-  detectedObservations <- t(sapply(numberOfEachDetectedObservations.names, function(x) unlist(strsplit(x,"-")) ))
-  rownames(detectedObservations) <- NULL
-  detectedObservations <- array(as.numeric(detectedObservations),dim(detectedObservations))
+  nObsVec <- table(data.comp)
+  nObsVec.names <- names(nObsVec)
+  obs <- t(sapply(nObsVec.names, function(x) unlist(strsplit(x,"-")) ))
+  rownames(obs) <- NULL
+  obs <- array(as.numeric(obs),dim(obs))
 
   # Removing samples with missing information
-  sel <- rowSums(detectedObservations==0)==0
-  numberOfEachDetectedObservations <- numberOfEachDetectedObservations[sel]
-  detectedObservations <- detectedObservations[sel,]
+  sel <- rowSums(obs==0)==0
+  nObsVec <- nObsVec[sel]
+  obs <- obs[sel,]
 
-  list(detectedObservations, numberOfEachDetectedObservations)
+  list(obs, nObsVec)
 }
 
-buildAllPossibleHaplotypes <- function(numberOfAllelesAtEachMarker){
-  numberOfLoci <- length(numberOfAllelesAtEachMarker)
-  H <- array(0, c(prod(numberOfAllelesAtEachMarker),numberOfLoci))
-  for(i in 1:(numberOfLoci-1)){
-    H[,i] <- rep(0:(numberOfAllelesAtEachMarker[i]-1), each = prod(numberOfAllelesAtEachMarker[(i+1):numberOfLoci]))
+allHaplotypes <- function(n_marker){
+  nLoci <- length(n_marker)
+  H <- array(0, c(prod(n_marker),nLoci))
+  for(i in 1:(nLoci-1)){
+    H[,i] <- rep(0:(n_marker[i]-1), each = prod(n_marker[(i+1):nLoci]))
   }
-  H[,numberOfLoci] <- rep(0:(numberOfAllelesAtEachMarker[numberOfLoci]-1), each = 1)
+  H[,nLoci] <- rep(0:(n_marker[nLoci]-1), each = 1)
   H
 }
 
-buildAllPossibleObservations <- function(numberOfAllelesAtEachMarker){
-  numberOfAllelesAtEachMarker <- 2^numberOfAllelesAtEachMarker - 1
-
-  numberOfLoci <- length(numberOfAllelesAtEachMarker)
-  H <- array(0, c(prod(numberOfAllelesAtEachMarker),numberOfLoci))
-  for(i in 1:(numberOfLoci-1)){
-    H[,i] <- rep(0:(numberOfAllelesAtEachMarker[i]-1), each = prod(numberOfAllelesAtEachMarker[(i+1):numberOfLoci]))
+allObservations <- function(n_marker){
+  n_marker <- 2^n_marker - 1
+  nLoci <- length(n_marker)
+  H <- array(0, c(prod(n_marker),nLoci))
+  for(i in 1:(nLoci-1)){
+    H[,i] <- rep(0:(n_marker[i]-1), each = prod(n_marker[(i+1):nLoci]))
   }
-  H[,numberOfLoci] <- rep(0:(numberOfAllelesAtEachMarker[numberOfLoci]-1), each = 1)
+  H[,nLoci] <- rep(0:(n_marker[nLoci]-1), each = 1)
   H + 1
 }
 
-sampleWithConditionalPoisson <- function(lambda,sampleSize){
+conditionalPoissonSampling <- function(lambda,N){
   m <- 100 # to accelerate computation it is assumed that m<100 is generically drawn
   out <- NULL
-  x <- runif(sampleSize,min=0,max=1)
+  x <- runif(N,min=0,max=1)
   p0 <- ppois(0,lambda)
   nc <- 1/(1-exp(-lambda))
   pvec <- (ppois(1:m,lambda)-p0)*nc
   pvec <- c(pvec,1)
-  for (i in 1:sampleSize){
+  for (i in 1:N){
     k <- 1
     while(x[i] > pvec[k]){
       k <- k+1
@@ -418,7 +392,7 @@ sampleWithConditionalPoisson <- function(lambda,sampleSize){
   out
 }
 
-convertDatasetToStandardFormat <- function(dataset, markersOfInterest){
+datasetToStandard <- function(dataset, markersOfInterest){
   ### dataset... is the input dataset in standard format of package MLMOI, 1 st column contains smaple IDs
   ### markers ... vector of columms containing markers to be included
 
@@ -448,28 +422,28 @@ convertDatasetToStandardFormat <- function(dataset, markersOfInterest){
   list(samples.coded,allele.list,allele.num)
 }
 
-calculatePairwiseLDWithAddons <- function(dataset, markersPair, idExists = TRUE, isConfidenceInterval=FALSE,numberOfBootstrapReplicatesConfidenceInterval=10000, significanceLevel=0.05){
-  listOfDatasets  <<- convertToListOfDatasets(dataset[[1]], idExists=idExists)
-  numberOfAllelesAtEachMarker <<- dataset[[3]][markersPair]
-  numberOfEachDetectedObservations <- listOfDatasets[[2]]
-  listOfLDEstimates <- calculatePairwiseLD(listOfDatasets,dataset)
+pairwiseLD <- function(dataset, markersPair, idExists = TRUE, isCI=FALSE,replCI=10000, alpha=0.05){
+  listOfDatasets  <<- datasetXNx(dataset[[1]], idExists=idExists)
+  n_marker <<- dataset[[3]][markersPair]
+  nObsVec <- listOfDatasets[[2]]
+  listOfLDEstimates <- pairwiseLDBase(listOfDatasets,dataset)
 
   # Bootstrap CIs
-  if(isConfidenceInterval){
-    sampleSize <<- sum(numberOfEachDetectedObservations)
-    probabilityOfEachObservation <<- numberOfEachDetectedObservations/sampleSize
-    arrayOfBootstrappedEstimates <- array(0, dim = c(2, numberOfBootstrapReplicatesConfidenceInterval))
-    observation <<- seq_along(numberOfEachDetectedObservations)
-    for (bootstrapReplicate in 1:numberOfBootstrapReplicatesConfidenceInterval){
-      bootstrappedListOfDatasets <- buildBootstrappedDataset()
-      bootstrappedListOfLDEstimates <- calculatePairwiseLD(bootstrappedListOfDatasets,dataset)
-      arrayOfBootstrappedEstimates[,bootstrapReplicate]  <- unlist(bootstrappedListOfLDEstimates)
+  if(isCI){
+    N <<- sum(nObsVec)
+    probaObs <<- nObsVec/N
+    arrayBootEstim <- array(0, dim = c(2, replCI))
+    observation <<- seq_along(nObsVec)
+    for (bootRepl in 1:replCI){
+      bootDataset <- bootstrapDataset()
+      bootEstim <- pairwiseLDBase(bootDataset,dataset)
+      arrayBootEstim[,bootRepl]  <- unlist(bootEstim)
     }
-    arrayOfBootstrappedEstimates <- arrayOfBootstrappedEstimates[ , colSums(is.na(arrayOfBootstrappedEstimates))==0]
-    percentiles <- t(apply(arrayOfBootstrappedEstimates, 1, quantile, c(significanceLevel/2, (1-significanceLevel/2))))
-    out <- cbind(unlist(listOfLDEstimates),percentiles)
+    arrayBootEstim <- arrayBootEstim[ , colSums(is.na(arrayBootEstim))==0]
+    perc <- t(apply(arrayBootEstim, 1, quantile, c(alpha/2, (1-alpha/2))))
+    out <- cbind(unlist(listOfLDEstimates),perc)
     rownames(out) <- c("D'", bquote(r^2))
-    colnames(out) <- c('', paste0(as.character((significanceLevel/2)*100), '%'), paste0(as.character((1-significanceLevel/2)*100), '%'))
+    colnames(out) <- c('', paste0(as.character((alpha/2)*100), '%'), paste0(as.character((1-alpha/2)*100), '%'))
   }else{
     out <- unlist(listOfLDEstimates)
     names(out) <- c("D'", expression(r^2))
@@ -477,12 +451,12 @@ calculatePairwiseLDWithAddons <- function(dataset, markersPair, idExists = TRUE,
   out
 }
 
-calculatePairwiseLD <- function(listOfDatasets,dataset){
-  ListOfMaximumLikelihoodEstimates <- calculateMaximumLikelihoodEstimates(listOfDatasets,numberOfAllelesAtEachMarker)
-  frequencyEstimates <- ListOfMaximumLikelihoodEstimates$p
-  frequencyEstimates <- labelFrequencyEstimates(dataset,frequencyEstimates,markersPair)
-  frequencyEstimates <- as.data.frame(frequencyEstimates)
-  listOfLDEstimates <- list(dPrime(frequencyEstimates), rSquare(frequencyEstimates))
+pairwiseLDBase <- function(listOfDatasets,dataset){
+  ListOfMaximumLikelihoodEstimates <- baseModel(listOfDatasets,n_marker)
+  freqEstim <- ListOfMaximumLikelihoodEstimates$p
+  freqEstim <- labelFreqEstim(dataset,freqEstim,markersPair)
+  freqEstim <- as.data.frame(freqEstim)
+  listOfLDEstimates <- list(dPrime(freqEstim), rSquare(freqEstim))
   names(listOfLDEstimates) <- c("D'", "r^2")
   listOfLDEstimates
 }
@@ -538,21 +512,21 @@ rSquare <- function(dataset){ ### Calculates R^2 according to Hedrick 1987
   rsquare
 }
 
-labelFrequencyEstimates <- function(dataset,frequencyEstimates, markersPair){ ## allist list with alleles per locus
-  numberOfLoci <- length(markersPair)
-  mixRadixBaseCumulativeProduct <- c(1, cumprod(dataset[[3]][markersPair])[1:(numberOfLoci-1)])
-  rnames1 <- as.integer(rownames(frequencyEstimates)) - 1
+labelFreqEstim <- function(dataset,freqEstim, markersPair){ ## allist list with alleles per locus
+  nLoci <- length(markersPair)
+  mixRadixBaseCumulativeProduct <- c(1, cumprod(dataset[[3]][markersPair])[1:(nLoci-1)])
+  rnames1 <- as.integer(rownames(freqEstim)) - 1
   rnames  <- rnames1
-  numberOfHaplotypes <- length(rnames)
-  mixRadixTableOfDetectedHaplotypes <- array(0,c(numberOfHaplotypes,numberOfLoci))
-  for(k in 1:numberOfLoci){ #for each locus
+  nHaplotypes <- length(rnames)
+  mixRadixTableOfHap <- array(0,c(nHaplotypes,nLoci))
+  for(k in 1:nLoci){ #for each locus
     re <- rnames%%rev(mixRadixBaseCumulativeProduct)[k]
-    mixRadixTableOfDetectedHaplotypes[,(numberOfLoci-k+1)] <- (rnames-re)/rev(mixRadixBaseCumulativeProduct)[k]
+    mixRadixTableOfHap[,(nLoci-k+1)] <- (rnames-re)/rev(mixRadixBaseCumulativeProduct)[k]
     rnames <- re
   }
-  mixRadixTableOfDetectedHaplotypes <- mixRadixTableOfDetectedHaplotypes+1
-  frequencyEstimates <- cbind(mixRadixTableOfDetectedHaplotypes, frequencyEstimates)
-  frequencyEstimates
+  mixRadixTableOfHap <- mixRadixTableOfHap+1
+  freqEstim <- cbind(mixRadixTableOfHap, freqEstim)
+  freqEstim
 }
 
 varsets2 <- function(l){   #calculate all var sets
@@ -609,5 +583,113 @@ gead <- function(x,l,n){   ## calculates geadic expression of each element of ve
     out[,k] <- (x-r)/div[k]
     x <- r
   }
+  out
+}
+
+baseModelSim <- function(dataset,n_marker){
+  samplesWithMissingData <- rowSums(dataset == 0) > 0
+  dataset <- dataset[!samplesWithMissingData,]
+
+  ### Actual sample size
+  sampleSizeWithNoMissingData <- nrow(dataset)
+  listOfDatasets  <- datasetXNx(dataset, idExists=FALSE)
+  tolerance <- 10^-8 # Error tolerance
+  obs     <- listOfDatasets[[1]]
+  nObsVec <- listOfDatasets[[2]]
+  N <- sum(nObsVec)
+  subsetsFromDataset <- modelSubsets(obs, n_marker)
+  nObs <- nrow(obs)
+  Ax <- subsetsFromDataset[[1]]
+  hapll <- subsetsFromDataset[[2]]
+  hapl1 <- unique(unlist(hapll))
+
+  # initialize parameters
+  H <- length(hapl1)
+  pp <- array(rep(1/H,H),c(H,1))
+  rownames(pp) <- hapl1
+
+  #initial list
+  num0  <- pp*0
+  cond1 <- 1  ## condition to stop EM alg!
+  la    <- 2
+  num   <- num0
+  rownames(num)    <- hapl1
+  Bcoeff           <- num0
+  rownames(Bcoeff) <- hapl1
+  t <- 0
+  globalNumberOfIterations <- 500
+  nIterationsLambda <- 300
+  while(cond1>tolerance && t<globalNumberOfIterations){
+    t <- t+1
+    Ccoeff <- 0
+    Bcoeff <- num0 #reset B coefficients to 0 in next iteration
+    for(u in 1:nObs){
+      denom <- 0
+      num <- num0
+      CC <- 0
+      for(k in 1:Ax[[u]][[1]]){
+        p <- sum(pp[Ax[[u]][[4]][[k]],])
+        vz <- Ax[[u]][[3]][[k]]
+        lap <- la*p
+        exlap <- vz*exp(lap)
+        denom <- denom + exlap-vz
+        num[Ax[[u]][[4]][[k]],] <- num[Ax[[u]][[4]][[k]],]+ exlap # Sum with indicator function
+        CC <- CC + exlap*p
+      }
+      num <- num*pp
+      denom <- nObsVec[u]/denom
+      denom <- la*denom
+      Ccoeff <- Ccoeff + CC*denom
+      Bcoeff <- Bcoeff + num*denom
+    }
+    Ccoeff <- Ccoeff/N
+
+    # Replacing NaN's in Ak by 0
+    cnt <- sum(is.nan(Bcoeff))
+    if(cnt > 0){
+      break
+    }else{
+      ppn <- Bcoeff/(sum(Bcoeff))
+    }
+
+    ### Newton step
+    cond2 <- 1
+    xt    <- Ccoeff   ### good initial condition
+    tau   <- 0
+    while(cond2 > tolerance && tau < nIterationsLambda){
+      tau <- tau + 1
+      ex  <- exp(-xt)
+      xtn <- xt + (1-ex)*(xt + Ccoeff*ex - Ccoeff)/(ex*xt+ex-1)
+      if(is.nan(xtn) || (tau == (nIterationsLambda-1)) || xtn < 0){
+        xtn <- runif(1, 0.1, 2.5)
+      }
+      cond2 <- abs(xtn-xt)
+      xt <- xtn
+    }
+    cond1 <- abs(xt-la)+sqrt(sum((pp-ppn)^2))
+    la <- xt
+    pp <- ppn
+  }
+  ## Ordering the frequencies
+  pp <- pp[order(as.numeric(rownames(pp))), ]
+
+  ## Setting the frequencies of the unobserved haplotypes to 0.0
+  nhapl <- prod(n_marker)
+
+  if(length(pp)<nhapl){
+    out <- t(pp)
+    name <- colnames(out)
+    cnt <- 0
+    for (i in 1:nhapl) {
+      if (is.element(as.character(i), name)){
+        cnt <- cnt + 1
+      }else{
+        pp <- append(pp, list(x = 0.0), i-1)
+      }
+    }
+  }
+  names(la) <- NULL
+  out <- list(la,unlist(pp))
+  names(out) <- c('lambda', 'p')
   out
 }
