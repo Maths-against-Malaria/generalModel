@@ -39,8 +39,8 @@ MLE(dataset[[1]][,markers], dataset[[3]][markers], idExists = FALSE, isBC = TRUE
 # Finding MLEs (haplotype frequencies and MOI) using a 90% confidence interval and 15000 bootstrap replicates
 MLE(dataset[[1]][,markers], dataset[[3]][markers], idExists = FALSE, isCI = TRUE, replCI = 15000, alpha = 0.10)
 
-# Finding pairwise LD between two loci. The function outputs the LD measures D', r-squared.
-pairwiseLD(dataset, markersPair, idExists = FALSE)
+# Finding MLEs (haplotype frequencies and MOI) with bias-correction and a 90% confidence
+MLE(datasetStandard[[1]][,markers], datasetStandard[[3]][markers], idExists = FALSE, isBC = TRUE, replBC = 20000, isCI = TRUE, replCI = 15000, alpha = 0.10)
 
 # Finding pairwise LD between two loci (,i.e., at 1st and 4th column), using D' and r-squared with a 95% confidence interval
 markersPair <- c(1,4)
