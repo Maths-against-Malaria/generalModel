@@ -694,26 +694,26 @@ baseModelSim <- function(dataset,n_marker){
   out
 }
 
-CRLB <- function(mle,nloci){
-
+CRLB <- function(mle, nloci){
   lambda <- mle[[1]]
   freq <- mle[[2]]
+  hapnames <- mle[[3]]
   N <- mle[[4]]
-  
+
   #### Generate all possible observations given nloci
-  detectedObservations    <- allObservations(nloci)
+  detectedObservations  <- allObservations(nloci)
   Nobs <- nrow(detectedObservations)
 
   # Find for each infection detectedObservations all components necessary for the computations
   Ax <- modelSubsets(detectedObservations, nloci)[[1]]
 
   # Initialize the Fisher information matrix of degree d
-  names(freq) <- seq_along(freq)
-  pp   <- matrix(freq, ncol=1)
-  hap  <- as.numeric(names(freq))
-  rownames(pp) <- hap
+  detectedHaplotypes <- rank(hapnames, nloci)
+  rownames(freq) <- detectedHaplotypes
+  pp <- matrix(0, ncol=1, nrow = prod(nloci)) 
+  pp[as.numeric(rownames(freq)),] <- freq
 
-  d <- nrow(pp)+2
+  d <- nrow(freq)+2
   diag.el <- diag(array(1:d^2,c(d,d)))[-1]
   diag.el <- diag.el[-length(diag.el)]
 
@@ -729,28 +729,32 @@ CRLB <- function(mle,nloci){
     out1 <- 0
     out2 <- 0
     for(k in 1:(Ax[[u]][[1]][[1]])){  # For each observation y in the sub-observation ScrAx
-      sump <- sum(pp[Ax[[u]][[4]][[k]],])
-      vz   <- Ax[[u]][[3]][[k]]
-      out1 <- out1 + vz*GFunc(lambda,sump)   # GFunc to build Px
-      out2 <- out2 + vz*dGFunc(lambda,sump)  # dG/dl to build dPx/dlam
+        sump <- sum(pp[as.numeric(Ax[[u]][[4]][[k]]),])
+        vz   <- Ax[[u]][[3]][[k]]
+        out1 <- out1 + vz*GFunc(lambda,sump)   # GFunc to build Px
+        out2 <- out2 + vz*dGFunc(lambda,sump)  # dG/dl to build dPx/dlam
     }
-    out <- out + (out2^2)/out1 #Ill
+    if(out1 != 0){
+      out <- out + (out2^2)/out1 #Ill
+    }
   }
   I[1,1] <- N*out/(dPsi(lambda)^2)   # I_lam_lam
 
   # Ipi,pj  new
   out <- 0 * (freq%*%t(freq))
   for(u in 1:Nobs){
-    out1  <- 0
-    out2 <- 0*freq
+    out1 <- 0
+    out2 <- 0*pp
     for(k in 1:Ax[[u]][[1]]){  # For each observation y in the sub-observation ScrAx
-      sump  <- sum(pp[Ax[[u]][[4]][[k]],])
+      sump  <- sum(pp[as.numeric(Ax[[u]][[4]][[k]]),])
       elp   <- exp(lambda*sump)
       vz    <- Ax[[u]][[3]][[k]]
       out1  <- out1 + vz*GFunc(lambda,sump)
-      out2[as.numeric(Ax[[u]][[4]][[k]])] <- out2[as.numeric(Ax[[u]][[4]][[k]])] + vz*lambda*elp/elmo   # dG/dpi * Indic
+      out2[as.numeric(Ax[[u]][[4]][[k]]),1] <- out2[as.numeric(Ax[[u]][[4]][[k]]),1] + vz*lambda*elp/elmo   # dG/dpi * Indic
     }
-    out <- out + (out2 %*% t(out2/out1))
+    if(out1 != 0){
+    out <- out + (out2 %*% t(out2/out1))[c(detectedHaplotypes), c(detectedHaplotypes)]
+    }
   }
   I[2:(d-1),2:(d-1)] <- N*out
 
@@ -759,33 +763,39 @@ CRLB <- function(mle,nloci){
   for(u in 1:Nobs){
     out1  <- 0
     out21 <- 0
-    out22 <- 0*freq
+    out22 <- 0*pp
     for(k in 1:Ax[[u]][[1]]){  # For each observation y in the sub-observation ScrAx
-      sump  <- sum(pp[Ax[[u]][[4]][[k]],])
+      sump  <- sum(pp[as.numeric(Ax[[u]][[4]][[k]]),])
       elp   <- exp(lambda*sump)
       vz    <- Ax[[u]][[3]][[k]]
       out1  <- out1  + vz*GFunc(lambda,sump)             # GFunc
       out21 <- out21 + vz*dGFunc(lambda,sump)            # dG/dl
       out22[as.numeric(Ax[[u]][[4]][[k]])] <- out22[as.numeric(Ax[[u]][[4]][[k]])] + vz*(lambda*elp/elmo)    # dG/dpi
     }
-    out <- out + (out21*out22)/out1
+    if(out1 != 0){
+      out <- out + ((out21*out22)/out1)[c(detectedHaplotypes)]
+    }
   }
   tmpI <- N*out/dPsi(lambda)
   I[1,2:(d-1)] <- tmpI
   I[2:(d-1),1] <- tmpI
 
   # Parameter space in Higher dimension
-  dbeta <- c(0,rep(1,prod(nloci)),0)
+  dbeta <- c(0,rep(1,nrow(detectedHaplotypes)),0)
   I[,d] <- dbeta
   I[d,] <- dbeta
 
-  print("Inverting Now...")
-  out <- matrix.inverse(I)
-  out <- out[-d,]
-  out <- out[,-d]
+  invI <- matrixcalc::matrix.inverse(I)
+  invI <- invI[-d,]
+  invI <- invI[,-d]
   I <- I[-d,]
   I <- I[,-d]
-  list(I,zapsmall(out))
+  var <- diag(invI)
+  nam <- c('lambda', rownames(mle[[2]]))
+  names(var) <- nam
+  out <- list(invI, var)
+  names(out) <- c('Covariance matrix', 'Variance')
+  out
 }
 
 GFunc <- function(lambda, sumFreq){
@@ -805,4 +815,11 @@ dGFunc <- function(lambda, freq){
 dPsi <- function(lambda){
   eml <- 1-exp(-lambda)
   1/eml - (lambda*exp(-lambda))/(eml^2)
+}
+
+rank <- function(hap, nloci){
+hap <- hap-1
+gk <- cumprod(nloci)
+rk <- hap%*%c(1,gk)[-(length(gk)+1)] + 1
+rk
 }

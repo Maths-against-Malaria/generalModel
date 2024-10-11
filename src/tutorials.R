@@ -4,7 +4,7 @@
 #                from genomic/molecular data
 # Created by   : Christian Tsoungui Obama
 # Created on   : 27.10.23
-# Last modified: 05.12.23
+# Last modified: 11.10.24
 
 # Load external resources
 source('/home/johndoe/Documents/src/model.R')
@@ -14,7 +14,7 @@ source('/home/johndoe/Documents/src/model.R')
 
 # Load libraries
 library(openxlsx)
-
+path <- '/Users/christian/Documents/Phd/models/generalModel/'
 #################################
 ### Import Datasets
 ##################################
@@ -51,8 +51,8 @@ pairwiseLD(dataset, markersPair, idExists = FALSE, isCI=TRUE, replCI = 20000, al
 ### Asymptotic variance of MLEs
 ##################################
 ## Estimate MLEs
-markers <- 1:4
-est <- MLE(dataset[[1]][,markers], dataset[[3]][markers], idExists = FALSE)
+markers <- 1:2
+mle <- MLE(dataset[[1]][,markers], dataset[[3]][markers], idExists = FALSE)
 
-## Calculate covariance matrix
+## Calculate covariance matrix and variance
 CRLB(mle, dataset[[3]][markers])
