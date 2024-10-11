@@ -694,7 +694,12 @@ baseModelSim <- function(dataset,n_marker){
   out
 }
 
-CRLB <- function(freq,lambda,N,nloci){
+CRLB <- function(mle,nloci){
+
+  lambda <- mle[[1]]
+  freq <- mle[[2]]
+  N <- mle[[4]]
+  
   #### Generate all possible observations given nloci
   detectedObservations    <- allObservations(nloci)
   Nobs <- nrow(detectedObservations)

@@ -45,3 +45,14 @@ MLE(datasetStandard[[1]][,markers], datasetStandard[[3]][markers], idExists = FA
 # Finding pairwise LD between two loci (,i.e., at 1st and 4th column), using D' and r-squared with a 95% confidence interval
 markersPair <- c(1,4)
 pairwiseLD(dataset, markersPair, idExists = FALSE, isCI=TRUE, replCI = 20000, alpha=0.10)
+
+
+#################################
+### Asymptotic variance of MLEs
+##################################
+## Estimate MLEs
+markers <- 1:4
+est <- MLE(dataset[[1]][,markers], dataset[[3]][markers], idExists = FALSE)
+
+## Calculate covariance matrix
+CRLB(mle, dataset[[3]][markers])
