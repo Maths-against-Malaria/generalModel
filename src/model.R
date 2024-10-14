@@ -419,6 +419,7 @@ datasetToStandard <- function(dataset, markersOfInterest){
   }
   )
   )
+  #names(allele.num) <- paste0('m',1:length(allele.num))
   list(samples.coded,allele.list,allele.num)
 }
 
@@ -694,7 +695,63 @@ baseModelSim <- function(dataset,n_marker){
   out
 }
 
-CRLB <- function(mle, nloci){
+crlb <- function(mle, nloci, isPsi = FALSE, isPrev = FALSE){
+  nameMean <- c('Mean_MOI', rownames(mle[[2]]))
+  if(isPsi){
+    if(isPrev){
+      out <- crlbPsiPrev(mle, nloci)
+      var <- diag(out)
+      names(var) <- nameMean
+      out <- list(out, var)
+      names(out) <- c('Covariance matrix', 'Variance')
+      out
+    }else {
+      out <- crlbPsi(mle, nloci)
+      var <- diag(out)
+      names(var) <- nameMean
+      out <- list(out, var)
+      names(out) <- c('Covariance matrix', 'Variance')
+      out
+    }
+  }else {
+    out <- solve(FIM(mle, nloci))
+    out <- out[-nrow(out), -ncol(out)]
+    var <- diag(out)
+    names(var) <- c('Lambda', rownames(mle[[2]]))
+    out <- list(out, var)
+    names(out) <- c('Covariance matrix', 'Variance')
+    out
+  }
+  out
+}
+
+crlbPsiPrev <- function(mle, nloci){
+  I <- FIM(mle, nloci)
+
+  lambda <- mle[[1]]
+  dgdl <- c(dGdL(lambda,mle[[2]]))
+  dgdpi <- c(dGdPi(lambda,mle[[2]]))
+  tmpvec <- c(1/dPsi(lambda),dgdpi,1)
+  J <- matrix(diag(tmpvec), ncol=(nrow(mle[[2]])+2))
+  J[2:(nrow(J)-1),1] <- dgdl
+
+  invJ <- solve(J)
+  
+  out <- invJ%*%solve(I)%*%t(invJ)
+  out[-nrow(out), -ncol(out)]
+}
+
+crlbPsi <- function(mle, nloci){
+  I <- FIM(mle, nloci)
+
+  lambda <- mle[[1]]
+  M <- diag(nrow(mle[[2]])+2)
+  M[1,1] <- dPsi(lambda)
+  out <- M%*%solve(I)%*%M
+  out[-nrow(out), -ncol(out)]
+}
+
+FIM <- function(mle, nloci){
   lambda <- mle[[1]]
   freq <- mle[[2]]
   hapnames <- mle[[3]]
@@ -738,7 +795,7 @@ CRLB <- function(mle, nloci){
       out <- out + (out2^2)/out1 #Ill
     }
   }
-  I[1,1] <- N*out/(dPsi(lambda)^2)   # I_lam_lam
+  I[1,1] <- N*out#/(dPsi(lambda)^2)   # I_lam_lam
 
   # Ipi,pj  new
   out <- 0 * (freq%*%t(freq))
@@ -776,7 +833,7 @@ CRLB <- function(mle, nloci){
       out <- out + ((out21*out22)/out1)[c(detectedHaplotypes)]
     }
   }
-  tmpI <- N*out/dPsi(lambda)
+  tmpI <- N*out#/dPsi(lambda)
   I[1,2:(d-1)] <- tmpI
   I[2:(d-1),1] <- tmpI
 
@@ -785,17 +842,19 @@ CRLB <- function(mle, nloci){
   I[,d] <- dbeta
   I[d,] <- dbeta
 
-  invI <- matrixcalc::matrix.inverse(I)
-  invI <- invI[-d,]
-  invI <- invI[,-d]
-  I <- I[-d,]
-  I <- I[,-d]
-  var <- diag(invI)
-  nam <- c('lambda', rownames(mle[[2]]))
-  names(var) <- nam
-  out <- list(invI, var)
-  names(out) <- c('Covariance matrix', 'Variance')
-  out
+  I
+
+  # invI <- matrixcalc::matrix.inverse(I)
+  # invI <- invI[-d,]
+  # invI <- invI[,-d]
+  # I <- I[-d,]
+  # I <- I[,-d]
+  # var <- diag(invI)
+  # nam <- c('lambda', rownames(mle[[2]]))
+  # names(var) <- nam
+  # out <- list(invI, var)
+  # names(out) <- c('Covariance matrix', 'Variance')
+  # out
 }
 
 GFunc <- function(lambda, sumFreq){
@@ -822,4 +881,21 @@ hap <- hap-1
 gk <- cumprod(nloci)
 rk <- hap%*%c(1,gk)[-(length(gk)+1)] + 1
 rk
+}
+
+prev <- function(mle){
+  lambda <- mle[[1]]
+  pp <- mle[[2]]
+  lp <- lambda*pp
+  mle[[2]][,1] <- (1-exp(-lp))/(1-exp(-lambda))
+  names(mle) <- c("lambda" ,"haplotypes_prevalence", "detected_haplotypes", "used_sample_size")
+  mle
+}
+
+dGdPi <- function(lambda, pp){
+  lambda*exp(-lambda*pp)/(1-exp(-lambda))
+}
+
+dGdL <- function(lambda, pp){
+  pp*exp(-lambda*pp)/(1-exp(-lambda))-exp(lambda)*(1-exp(-lambda*pp))/(1-exp(-lambda))^2
 }

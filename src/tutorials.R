@@ -7,7 +7,7 @@
 # Last modified: 11.10.24
 
 # Load external resources
-source('/home/johndoe/Documents/src/model.R')
+source('/Users/christian/Documents/Phd/models/generalModel/src/model.R')
 
 # Install the necessary packages if necessary
 #install.packages('openxlsx')   # uncomment this line to install openxlsx
@@ -46,13 +46,24 @@ MLE(datasetStandard[[1]][,markers], datasetStandard[[3]][markers], idExists = FA
 markersPair <- c(1,4)
 pairwiseLD(dataset, markersPair, idExists = FALSE, isCI=TRUE, replCI = 20000, alpha=0.10)
 
-
 #################################
-### Asymptotic variance of MLEs
+### Estimate prevalence
 ##################################
 ## Estimate MLEs
 markers <- 1:2
 mle <- MLE(dataset[[1]][,markers], dataset[[3]][markers], idExists = FALSE)
 
-## Calculate covariance matrix and variance
-CRLB(mle, dataset[[3]][markers])
+## Estimating haplotype prevalence
+prev(mle)
+
+#################################
+### Asymptotic variance of MLEs
+##################################
+## Calculate covariance matrix MOI parameter and frequencies
+crlb(mle, dataset[[3]][markers])
+
+## Calculate covariance matrix mean MOI parameter and frequencies
+crlb(mle, dataset[[3]][markers], isPsi = TRUE)
+
+## Calculate covariance matrix mean MOI parameter and prevalence
+crlb(mle, dataset[[3]][markers], isPsi = TRUE, isPrev = TRUE)
