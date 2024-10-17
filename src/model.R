@@ -702,6 +702,8 @@ CRLB <- function(mle, nloci, isPsi = FALSE, isPrev = FALSE){
       out <- crlbPsiPrev(mle, nloci)
       var <- diag(out)
       names(var) <- nameMean
+      rownames(out) <- nameMean
+      colnames(out) <- nameMean
       out <- list(out, var)
       names(out) <- c('Covariance matrix', 'Variance')
       out
@@ -709,6 +711,8 @@ CRLB <- function(mle, nloci, isPsi = FALSE, isPrev = FALSE){
       out <- crlbPsi(mle, nloci)
       var <- diag(out)
       names(var) <- nameMean
+      rownames(out) <- nameMean
+      colnames(out) <- nameMean
       out <- list(out, var)
       names(out) <- c('Covariance matrix', 'Variance')
       out
@@ -718,6 +722,8 @@ CRLB <- function(mle, nloci, isPsi = FALSE, isPrev = FALSE){
     out <- out[-nrow(out), -ncol(out)]
     var <- diag(out)
     names(var) <- c('Lambda', rownames(mle[[2]]))
+      rownames(out) <- c('Lambda', rownames(mle[[2]]))
+      colnames(out) <- c('Lambda', rownames(mle[[2]]))
     out <- list(out, var)
     names(out) <- c('Covariance matrix', 'Variance')
     out

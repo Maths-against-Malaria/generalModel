@@ -59,11 +59,11 @@ PREV(mle)
 #################################
 ### Asymptotic variance of MLEs
 ##################################
-## Calculate covariance matrix MOI parameter and frequencies
+## Calculate covariance matrix for MOI parameter and frequencies
 CRLB(mle, dataset[[3]][markers])
 
-## Calculate covariance matrix mean MOI parameter and frequencies
+## Calculate covariance matrix for mean MOI and frequencies
 CRLB(mle, dataset[[3]][markers], isPsi = TRUE)
 
-## Calculate covariance matrix mean MOI parameter and prevalence
+## Calculate covariance matrix for mean MOI and prevalence
 CRLB(mle, dataset[[3]][markers], isPsi = TRUE, isPrev = TRUE)
