@@ -718,7 +718,7 @@ CRLB <- function(mle, nloci, isPsi = FALSE, isPrev = FALSE){
       out
     }
   }else {
-    out <- solve(FIM(mle, nloci))
+    out <- round(solve(FIM(mle, nloci)),3)
     out <- out[-nrow(out), -ncol(out)]
     var <- diag(out)
     names(var) <- c('Lambda', rownames(mle[[2]]))
@@ -744,7 +744,7 @@ crlbPsiPrev <- function(mle, nloci){
   invJ <- solve(J)
   
   out <- invJ%*%solve(I)%*%t(invJ)
-  out[-nrow(out), -ncol(out)]
+  round(out[-nrow(out), -ncol(out)],3)
 }
 
 crlbPsi <- function(mle, nloci){
@@ -754,7 +754,7 @@ crlbPsi <- function(mle, nloci){
   M <- diag(nrow(mle[[2]])+2)
   M[1,1] <- dPsi(lambda)
   out <- M%*%solve(I)%*%M
-  out[-nrow(out), -ncol(out)]
+  round(out[-nrow(out), -ncol(out)],3)
 }
 
 FIM <- function(mle, nloci){
