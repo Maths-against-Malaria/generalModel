@@ -695,7 +695,7 @@ baseModelSim <- function(dataset,n_marker){
   out
 }
 
-crlb <- function(mle, nloci, isPsi = FALSE, isPrev = FALSE){
+CRLB <- function(mle, nloci, isPsi = FALSE, isPrev = FALSE){
   nameMean <- c('Mean_MOI', rownames(mle[[2]]))
   if(isPsi){
     if(isPrev){
@@ -883,7 +883,7 @@ rk <- hap%*%c(1,gk)[-(length(gk)+1)] + 1
 rk
 }
 
-prev <- function(mle){
+PREV <- function(mle){
   lambda <- mle[[1]]
   pp <- mle[[2]]
   lp <- lambda*pp

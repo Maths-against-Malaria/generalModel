@@ -54,16 +54,16 @@ markers <- 1:2
 mle <- MLE(dataset[[1]][,markers], dataset[[3]][markers], idExists = FALSE)
 
 ## Estimating haplotype prevalence
-prev(mle)
+PREV(mle)
 
 #################################
 ### Asymptotic variance of MLEs
 ##################################
 ## Calculate covariance matrix MOI parameter and frequencies
-crlb(mle, dataset[[3]][markers])
+CRLB(mle, dataset[[3]][markers])
 
 ## Calculate covariance matrix mean MOI parameter and frequencies
-crlb(mle, dataset[[3]][markers], isPsi = TRUE)
+CRLB(mle, dataset[[3]][markers], isPsi = TRUE)
 
 ## Calculate covariance matrix mean MOI parameter and prevalence
-crlb(mle, dataset[[3]][markers], isPsi = TRUE, isPrev = TRUE)
+CRLB(mle, dataset[[3]][markers], isPsi = TRUE, isPrev = TRUE)
