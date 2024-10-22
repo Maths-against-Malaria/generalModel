@@ -67,6 +67,7 @@ MLE <- function(dataset, n_marker, idExists=TRUE, plugin=NULL, isCI=FALSE, isBC=
     mle <- list(lbdaEstim, frequenciesEstimates, mixRadixTableOfHap, sampleSizeWithNoMissingData)
     names(mle) <- c('lambda', 'haplotypes_frequencies', 'detected_haplotypes', 'used_sample_size')
   }
+  rownames(mle[[2]]) <- paste("p", rownames(mle[[2]]), sep="") 
   mle
 }
 
@@ -696,9 +697,9 @@ baseModelSim <- function(dataset,n_marker){
 }
 
 CRLB <- function(mle, nloci, isPsi = FALSE, isPrev = FALSE){
-  nameMean <- c('Mean_MOI', rownames(mle[[2]]))
   if(isPsi){
     if(isPrev){
+      nameMean <- c('Mean_MOI', gsub("[p]", "q",rownames(mle[[2]])))
       out <- crlbPsiPrev(mle, nloci)
       var <- diag(out)
       names(var) <- nameMean
@@ -708,6 +709,7 @@ CRLB <- function(mle, nloci, isPsi = FALSE, isPrev = FALSE){
       names(out) <- c('Covariance matrix', 'Variance')
       out
     }else {
+      nameMean <- c('Mean_MOI', rownames(mle[[2]]))
       out <- crlbPsi(mle, nloci)
       var <- diag(out)
       names(var) <- nameMean
@@ -894,6 +896,7 @@ PREV <- function(mle){
   pp <- mle[[2]]
   lp <- lambda*pp
   mle[[2]][,1] <- (1-exp(-lp))/(1-exp(-lambda))
+  rownames(mle[[2]]) <- gsub("[p]", "q",rownames(mle[[2]])) 
   names(mle) <- c("lambda" ,"haplotypes_prevalence", "detected_haplotypes", "used_sample_size")
   mle
 }
