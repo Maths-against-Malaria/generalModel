@@ -851,18 +851,6 @@ FIM <- function(mle, nloci){
   I[d,] <- dbeta
 
   I
-
-  # invI <- matrixcalc::matrix.inverse(I)
-  # invI <- invI[-d,]
-  # invI <- invI[,-d]
-  # I <- I[-d,]
-  # I <- I[,-d]
-  # var <- diag(invI)
-  # nam <- c('lambda', rownames(mle[[2]]))
-  # names(var) <- nam
-  # out <- list(invI, var)
-  # names(out) <- c('Covariance matrix', 'Variance')
-  # out
 }
 
 GFunc <- function(lambda, sumFreq){
