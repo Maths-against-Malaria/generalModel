@@ -405,20 +405,21 @@ datasetToStandard <- function(dataset, markersOfInterest){
 
   ###number of alleles per marker########
   allele.num <- unlist(lapply(allele.list,length))
+
   #### split data b sample ID
   dataset.split <- split(dataset[,markersOfInterest],dataset[,1])
 
   #### Binary representation of allele being absent and present
   samples.coded <- t(sapply(dataset.split, function(x){
-    mapply(function(x,y,z){
-      as.integer(is.element(y,x)) %*% 2^(0:(z-1))
-    },
-           x,
-           allele.list,
-           allele.num
+      mapply(function(x,y,z){
+          as.integer(is.element(y,x)) %*% 2^(0:(z-1))
+        },
+          x,
+          allele.list,
+          allele.num
+        )
+      }
     )
-  }
-  )
   )
   #names(allele.num) <- paste0('m',1:length(allele.num))
   list(samples.coded,allele.list,allele.num)
