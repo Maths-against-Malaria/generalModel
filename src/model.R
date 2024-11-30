@@ -880,13 +880,83 @@ rk <- hap%*%c(1,gk)[-(length(gk)+1)] + 1
 rk
 }
 
-PREV <- function(mle){
+prev0 <- function(mle){
   lambda <- mle[[1]]
   pp <- mle[[2]]
   lp <- lambda*pp
   mle[[2]][,1] <- (1-exp(-lp))/(1-exp(-lambda))
-  rownames(mle[[2]]) <- gsub("[p]", "q",rownames(mle[[2]])) 
-  names(mle) <- c("lambda" ,"haplotypes_prevalence", "detected_haplotypes", "used_sample_size")
+  mle
+}
+
+PREV <- function(dataset,n_marker,idExists=TRUE, plugin=NULL, isCI=FALSE, replCI=10000, alpha=0.05){
+  ### Dropping Missing data in dataset
+  samplesWithMissingData <- rowSums(dataset == 0) > 0
+  dataset <- dataset[!samplesWithMissingData,]
+
+  ### Actual sample size
+  sampleSizeWithNoMissingData <- nrow(dataset)
+  listOfDatasets  <- datasetXNx(dataset, idExists=idExists)
+
+  ### Dropping Missing data in dataset
+  samplesWithMissingData <- rowSums(dataset == 0) > 0
+  dataset <- dataset[!samplesWithMissingData,]
+  obs <<- listOfDatasets[[1]]
+  nObsVec <- listOfDatasets[[2]]
+  nLoci <- ncol(obs)
+
+  mle <- MLEPluginChoice(listOfDatasets, n_marker, plugin=NULL) # MLE(dataset, n_marker, idExists=idExists, plugin=plugin, isCI=isCI, isBC=FALSE, replBC=1, replCI=replCI, alpha=alpha)
+  mle <- prev0(mle)
+
+  mixRadixBaseCumulativeProduct <- c(1, cumprod(n_marker)[1:(nLoci-1)])
+  prevEstimates <- mle[[2]]
+  lbdaEstim <- mle[[1]]
+  rnames1 <- as.integer(rownames(prevEstimates)) - 1
+  rnames  <- rnames1
+  nh <- length(rnames)
+  mixRadixTableOfHap <- array(0,c(nh,nLoci))
+  for(k in 1:nLoci){ #for each locus
+    re <- rnames%%rev(mixRadixBaseCumulativeProduct)[k]
+    mixRadixTableOfHap[,(nLoci-k+1)] <- (rnames-re)/rev(mixRadixBaseCumulativeProduct)[k]
+    rnames <- re
+  }
+  mixRadixTableOfHap <- mixRadixTableOfHap+1
+  for(i in 1:nh){
+    rnames[i] <- paste(mixRadixTableOfHap[i,], collapse = '')
+  }
+  rownames(prevEstimates) <- rnames
+
+  # Bootstrap CIs
+  if(isCI){
+    nHap  <- length(prevEstimates)
+    N <<- sum(nObsVec)
+    probaObs  <<- nObsVec/N
+    arrayBootEstim <- array(0, dim = c((nHap+1), replCI=replCI))
+    rownames(arrayBootEstim) <- c('lambda',(rnames1+1))
+    observation <<- seq_along(nObsVec)
+    for (bootRepl in 1:replCI){
+      bootstrappedListOfDatasets <- bootstrapDataset()
+      bootEstim <- prev0(MLEPluginChoice(bootstrappedListOfDatasets, n_marker, plugin=plugin))
+      hap    <- as.integer(rownames(bootEstim[[2]]))
+      arrayBootEstim[1,bootRepl]  <- unlist(bootEstim[[1]])
+      arrayBootEstim[as.character(hap),bootRepl] <- unlist(bootEstim[[2]])
+    }
+    perc <- t(apply(arrayBootEstim, 1, quantile, c(alpha/2, (1-alpha/2))))
+    if(is.null(plugin)){
+      lbdaEstim <- c(unlist(mle[[1]]), perc[1,])
+      names(lbdaEstim) <- c('', paste0(as.character((alpha/2)*100), '%'), paste0(as.character((1-alpha/2)*100), '%'))
+    }else{
+      lbdaEstim <- mle[[1]]
+      names(lbdaEstim) <- ''
+    }
+    prevEstimCI <- cbind(prevEstimates,perc[2:(nHap+1),])
+    colnames(prevEstimCI) <- c('', paste0(as.character((alpha/2)*100), '%'), paste0(as.character((1-alpha/2)*100), '%'))
+    mle <- list(lbdaEstim, prevEstimCI, mixRadixTableOfHap, sampleSizeWithNoMissingData)
+    names(mle) <- c('lambda', 'haplotypes_prevalence', 'detected_haplotypes', 'used_sample_size')
+  }else{
+    mle <- list(lbdaEstim, prevEstimates, mixRadixTableOfHap, sampleSizeWithNoMissingData)
+    names(mle) <- c('lambda', 'haplotypes_prevalence', 'detected_haplotypes', 'used_sample_size')
+  }
+  rownames(mle[[2]]) <- paste("q", rownames(mle[[2]]), sep="") 
   mle
 }
 
