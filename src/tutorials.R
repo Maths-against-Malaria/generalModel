@@ -54,7 +54,7 @@ markers <- 1:2
 mle <- MLE(dataset[[1]][,markers], dataset[[3]][markers], idExists = FALSE)
 
 ## Estimating haplotype prevalence
-PREV(dataset[[1]][,markers], dataset[[3]][markers], idExists = FALSE, isCI=TRUE, replCI = 15000, alpha = 0.05)
+PREV(dataset[[1]][,markers], dataset[[3]][markers], idExists = FALSE, isCI=TRUE, replCI = 15000, alpha = 0.10)
 
 #################################
 ### Asymptotic variance of MLEs
