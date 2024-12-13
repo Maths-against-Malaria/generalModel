@@ -7,18 +7,18 @@
 # Last modified: 11.10.24
 
 # Load external resources
-source('/Users/christian/Documents/Phd/models/generalModel/src/model.R')
+source('/home/johndoe/documents/src/model.R')
 
 # Install the necessary packages if necessary
 #install.packages('openxlsx')   # uncomment this line to install openxlsx
 
 # Load libraries
 library(openxlsx)
-path <- '/Users/christian/Documents/Phd/models/generalModel/'
+
 #################################
 ### Import Datasets
 ##################################
-datasetNatural <- read.xlsx(paste0(path,'/exampleDatasets/dataset.xlsx'), 1)
+datasetNatural <- read.xlsx('/home/johndoe/documents/exampleDatasets/dataset.xlsx', 1)
 
 # Transform the data to the standard format
 dataset <- datasetToStandard(datasetNatural, 2:ncol(datasetNatural))
