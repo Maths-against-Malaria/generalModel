@@ -945,7 +945,7 @@ PREV <- function(dataset,n_marker,idExists=TRUE, plugin=NULL, isCI=FALSE, replCI
   }
   mixRadixTableOfHap <- mixRadixTableOfHap+1
   for(i in 1:nh){
-    rnames[i] <- paste(mixRadixTableOfHap[i,], collapse = '')
+    rnames[i] <- paste(mixRadixTableOfHap[i,], collapse = '.')
   }
   rownames(prevEstimates) <- rnames
 
