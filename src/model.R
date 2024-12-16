@@ -2,7 +2,7 @@
 # Objective    : Contains implementation of the model (EM-algorithm) and supporting functions
 # Created by   : Christian Tsoungui Obama, Kristan. A. Schneider
 # Created on   : 15.08.23
-# Last modified : 10.10.24
+# Last modified : 16.12.24
 
 MLE <- function(dataset, n_marker, idExists=TRUE, plugin=NULL, isCI=FALSE, isBC=FALSE, replBC=10000, replCI=10000, alpha=0.05){
   ### Dropping Missing data in dataset
@@ -32,9 +32,11 @@ MLE <- function(dataset, n_marker, idExists=TRUE, plugin=NULL, isCI=FALSE, isBC=
   }
   mixRadixTableOfHap <- mixRadixTableOfHap+1
   for(i in 1:nh){
-    rnames[i] <- paste(mixRadixTableOfHap[i,], collapse = '')
+    rnames[i] <- paste(mixRadixTableOfHap[i,], collapse = '.')
   }
   rownames(frequenciesEstimates) <- rnames
+
+  colnames(mixRadixTableOfHap) <- names(n_marker)
 
   # Bootstrap CIs
   if(isCI){
@@ -171,86 +173,106 @@ MLEPlugin <- function(dataset,n_marker,plugin){
 }
 
 baseModel <- function(dataset,n_marker){
-  tolerance <- 10^-8 # Error tolerance
-  obs     <- dataset[[1]]
-  nObsVec <- dataset[[2]]
-  N <- sum(nObsVec)
-  subsetsFromDataset <- modelSubsets(obs, n_marker)
-  nObs <- nrow(obs)
+  eps <- 10^-8
+  X <- dataset[[1]]
+  Nx <- dataset[[2]]
+  N <- sum(Nx)
+  subsetsFromDataset <- modelSubsets(X, n_marker)
+  nn <- nrow(X)
   Ax <- subsetsFromDataset[[1]]
   hapll <- subsetsFromDataset[[2]]
   hapl1 <- unique(unlist(hapll))
-
-  # initialize parameters
+  
+  
+  #_____________________________
+  # this calculates the list to pick proper haplotype freuencies, i.e. sets Ay
+  
+  #allconf <- function(x,l,n){  # x array
+  hapll <- list()
   H <- length(hapl1)
+  attemp <- 0
   pp <- array(rep(1/H,H),c(H,1))
   rownames(pp) <- hapl1
-
-  #initial list
-  num0  <- pp*0
-  cond1 <- 1  ## condition to stop EM alg!
-  la    <- 2
-  num   <- num0
-  rownames(num)    <- hapl1
-  Bcoeff           <- num0
+  
+  #initial list#
+  num0 <- pp*0
+  cond1 <- 1  ## condition to stop EM alg! 
+  la <- 2
+  num <- num0
+  rownames(num) <- hapl1
+  Bcoeff <- num0
   rownames(Bcoeff) <- hapl1
-  t <- 0
-  globalNumberOfIterations <- 500
-  nIterationsLambda <- 300
-  while(cond1>tolerance && t<globalNumberOfIterations){
-    t <- t+1
-    Ccoeff <- 0
-    Bcoeff <- num0 #reset B coefficients to 0 in next iteration
-    for(u in 1:nObs){
-      denom <- 0
-      num <- num0
-      CC <- 0
-      for(k in 1:Ax[[u]][[1]]){
-        p <- sum(pp[Ax[[u]][[4]][[k]],])
-        vz <- Ax[[u]][[3]][[k]]
-        lap <- la*p
-        exlap <- vz*exp(lap)
-        denom <- denom + exlap-vz
-        num[Ax[[u]][[4]][[k]],] <- num[Ax[[u]][[4]][[k]],]+ exlap # Sum with indicator function
-        CC <- CC + exlap*p
+  
+  ## If there is no sign of super-infections the estimate is degenerate p =Nx/N, and it is treated separately in the if-else statement
+  if(any(lapply(Ax,function(x) length(x[[3]]))>1)){ # generic case
+    stp <- 0 # this is to try different initial conditions if convergence is slow, if stp reaches 120 step a new initial condition is used,
+    # at most 50 different initial conditions are used
+    
+    while(cond1>eps){
+      stp <- stp + 1 
+      Ccoeff <- 0
+      Bcoeff <- num0 #reset B coefficients to 0 in next iteration
+      num <- num0  #reset numerator to 0 in next iteration
+      for(u in 1:nn){
+        denom <- 0
+        num <- num0
+        CC <- 0
+        for(k in 1:Ax[[u]][[1]]){
+          p <- sum(pp[Ax[[u]][[4]][[k]],])
+          vz <- Ax[[u]][[3]][[k]]
+          lap <- la*p
+          exlap <- vz*exp(lap)
+          denom <- denom + exlap-vz  ##   = (1-)^(Nx-Ny)*(Exp(lambda*sum p)-1) = (1-)^(Nx-Ny)*G(sum p)
+          num[Ax[[u]][[4]][[k]],] <- num[Ax[[u]][[4]][[k]],]+ exlap#*pp[Ax[[u]][[1]][[k]],]
+          ## exlap =  (1-)^(Nx-Ny) G'(sum p)   --- denominator of generating functions cancels out!
+          CC <- CC + exlap*p
+        }
+        num <- num*pp
+        denom <- Nx[u]/denom
+        denom <- la*denom
+        Ccoeff <- Ccoeff + CC*denom
+        Bcoeff <- Bcoeff + num*denom
       }
-      num <- num*pp
-      denom <- nObsVec[u]/denom
-      denom <- la*denom
-      Ccoeff <- Ccoeff + CC*denom
-      Bcoeff <- Bcoeff + num*denom
-    }
-    Ccoeff <- Ccoeff/N
-
-    # Replacing NaN's in Ak by 0
-    cnt <- sum(is.nan(Bcoeff))
-    if(cnt > 0){
-      break
-    }else{
+      Ccoeff <- Ccoeff/N
       ppn <- Bcoeff/(sum(Bcoeff))
-    }
-
-    ### Newton step
-    cond2 <- 1
-    xt    <- Ccoeff   ### good initial condition
-    tau   <- 0
-    while(cond2 > tolerance && tau < nIterationsLambda){
-      tau <- tau + 1
-      ex  <- exp(-xt)
-      xtn <- xt + (1-ex)*(xt + Ccoeff*ex - Ccoeff)/(ex*xt+ex-1)
-      if(is.nan(xtn) || (tau == (nIterationsLambda-1)) || xtn < 0){
-        xtn <- runif(1, 0.1, 2.5)
+      
+      ### Newton step
+      cond2 <- 1
+      xt <- Ccoeff   ### good initial condition
+      while(cond2 > eps){
+        ex <- exp(-xt)
+        xtn <- xt + (1-ex)*(xt + Ccoeff*ex - Ccoeff)/(ex*xt+ex-1)
+        cond2 <- abs(xtn-xt)
+        xt <- xtn
       }
-      cond2 <- abs(xtn-xt)
-      xt <- xtn
+      cond1 <- abs(xt-la) + sqrt(sum((pp-ppn)^2))
+      la <- xt
+      pp <- ppn
+      if(stp == 120 & attemp < 50 ){ # if algorithm dod not converge within 120 steps try new initial condition
+        #print(attemp)
+        attemp <- attemp + 1
+        stp <- 0
+        # new initial conditions
+        
+        tmp <- table(unlist(rep(lapply(Ax, function(x) x[[4]][[length(x[[4]])]]),Nx)))
+        #pp1 <- pp
+        
+        pp[names(tmp),] <- tmp/sum(tmp)
+        num0 <- pp*0
+        cond1 <- 1  ## condition to stop EM alg! 
+        la <- 2 + attemp
+        num <- num0
+        rownames(num) <- hapl1
+        Bcoeff <- num0
+        rownames(Bcoeff) <- hapl1
+      }
     }
-    cond1 <- abs(xt-la)+sqrt(sum((pp-ppn)^2))
-    la <- xt
-    pp <- ppn
+  }else{
+    la <- 0
+    pp[,1] <- Nx/N 
   }
-  names(la) <- NULL
-  out <- list(la,pp)
-  names(out) <- c('lambda', 'p')
+  out <- list(unname(la),pp)
+  names(out) <- c("MOI.est","Freq.est")
   out
 }
 
@@ -422,7 +444,9 @@ datasetToStandard <- function(dataset, markersOfInterest){
     )
   )
   #names(allele.num) <- paste0('m',1:length(allele.num))
-  list(samples.coded,allele.list,allele.num)
+  out <- list(samples.coded,allele.list,allele.num)
+  names(out) <- c('dataset', 'alleles', 'genetic_architecture')
+  out
 }
 
 pairwiseLD <- function(dataset, markersPair, idExists = TRUE, isCI=FALSE,replCI=10000, alpha=0.05){
