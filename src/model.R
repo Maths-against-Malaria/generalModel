@@ -450,7 +450,8 @@ datasetToStandard <- function(dataset, markersOfInterest){
 }
 
 pairwiseLD <- function(dataset, markersPair, idExists = TRUE, isCI=FALSE,replCI=10000, alpha=0.05){
-  listOfDatasets  <<- datasetXNx(dataset[[1]], idExists=idExists)
+  listOfDatasets  <- datasetXNx(dataset[[1]][,markersPair], idExists=idExists)
+  obs <<- listOfDatasets[[1]]
   n_marker <<- dataset[[3]][markersPair]
   nObsVec <- listOfDatasets[[2]]
   listOfLDEstimates <- pairwiseLDBase(listOfDatasets,dataset)
@@ -479,8 +480,8 @@ pairwiseLD <- function(dataset, markersPair, idExists = TRUE, isCI=FALSE,replCI=
 }
 
 pairwiseLDBase <- function(listOfDatasets,dataset){
-  ListOfMaximumLikelihoodEstimates <- baseModel(listOfDatasets,n_marker)
-  freqEstim <- ListOfMaximumLikelihoodEstimates$p
+  ListOfMaximumLikelihoodEstimates <- MLEPluginChoice(listOfDatasets, n_marker, plugin=NULL)
+  freqEstim <- ListOfMaximumLikelihoodEstimates[[2]]
   freqEstim <- labelFreqEstim(dataset,freqEstim,markersPair)
   freqEstim <- as.data.frame(freqEstim)
   listOfLDEstimates <- list(dPrime(freqEstim), rSquare(freqEstim))
@@ -928,7 +929,7 @@ PREV <- function(dataset,n_marker,idExists=TRUE, plugin=NULL, isCI=FALSE, replCI
   nObsVec <- listOfDatasets[[2]]
   nLoci <- ncol(obs)
 
-  mle <- MLEPluginChoice(listOfDatasets, n_marker, plugin=NULL) # MLE(dataset, n_marker, idExists=idExists, plugin=plugin, isCI=isCI, isBC=FALSE, replBC=1, replCI=replCI, alpha=alpha)
+  mle <- MLEPluginChoice(listOfDatasets, n_marker, plugin=NULL)
   mle <- prev0(mle)
 
   mixRadixBaseCumulativeProduct <- c(1, cumprod(n_marker)[1:(nLoci-1)])
