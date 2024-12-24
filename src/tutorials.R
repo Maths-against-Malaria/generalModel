@@ -14,7 +14,6 @@ source('/home/johndoe/documents/src/model.R')
 
 # Load libraries
 library(openxlsx)
-path <- '/Users/christian/Documents/Phd/models/generalModel/'
 
 #################################
 ### Import Datasets
