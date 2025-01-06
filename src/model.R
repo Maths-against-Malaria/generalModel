@@ -4,7 +4,12 @@
 # Created on   : 15.08.23
 # Last modified : 16.12.24
 
-MLE <- function(dataset, n_marker, idExists=TRUE, plugin=NULL, isCI=FALSE, isBC=FALSE, replBC=10000, replCI=10000, alpha=0.05){
+MLE <- function(data, markers, idExists=TRUE, plugin=NULL, isCI=FALSE, isBC=FALSE, replBC=10000, replCI=10000, alpha=0.05, allelesName=TRUE){
+  
+  dataset <- data[[1]][,markers]
+  alleleList <- data[[2]][markers]
+  n_marker <- data[[3]][markers]
+
   ### Dropping Missing data in dataset
   samplesWithMissingData <- rowSums(dataset == 0) > 0
   dataset <- dataset[!samplesWithMissingData,]
@@ -27,15 +32,23 @@ MLE <- function(dataset, n_marker, idExists=TRUE, plugin=NULL, isCI=FALSE, isBC=
   mixRadixTableOfHap <- array(0,c(nh,nLoci))
   for(k in 1:nLoci){ #for each locus
     re <- rnames%%rev(mixRadixBaseCumulativeProduct)[k]
-    mixRadixTableOfHap[,(nLoci-k+1)] <- (rnames-re)/rev(mixRadixBaseCumulativeProduct)[k]
+    mixRadixTableOfHap[,(nLoci-k+1)] <- as.character((rnames-re)/rev(mixRadixBaseCumulativeProduct)[k] + 1)
     rnames <- re
   }
-  mixRadixTableOfHap <- mixRadixTableOfHap+1
-  for(i in 1:nh){
-    rnames[i] <- paste(mixRadixTableOfHap[i,], collapse = '.')
+  #mixRadixTableOfHap <- mixRadixTableOfHap+1
+  if(allelesName){
+    frequenciesEstimates <- haplotypenaming(frequenciesEstimates,alleleList)
+    for (i in 1:length(alleleList)){
+      mixRadixTableOfHap[,i] <- alleleList[[i]][as.numeric(mixRadixTableOfHap[,i])]
+    }
+  }else {
+    for(i in 1:nh){
+      rnames[i] <- paste(mixRadixTableOfHap[i,], collapse = '.')
+    }
+    rownames(frequenciesEstimates) <- rnames
+    mixRadixTableOfHap <- apply(mixRadixTableOfHap, 2, as.numeric)
   }
-  rownames(frequenciesEstimates) <- rnames
-
+  
   colnames(mixRadixTableOfHap) <- names(n_marker)
 
   # Bootstrap CIs
@@ -281,6 +294,22 @@ bootstrapDataset <- function(){
   bootDataset <- obs[rep(1:nrow(obs),bootSamples),]
   bootDataset  <- datasetXNx(bootDataset, idExists=FALSE)
   bootDataset
+}
+
+haplotypenaming <- function(pp,allist){ ## allist list with alleles per locos
+  allist <- lapply(allist,as.character)  # this makes sure factor-levels are used
+  n <- length(allist)
+  allnum <- unlist(lapply(allist,length))
+  hapl <- geadrepr(as.numeric(rownames(pp))-1,allnum)+1
+  hapl1 <- array(NA,dim(hapl))
+  for(l in 1: ncol(hapl)){
+    for(m in 1: nrow(hapl)){
+      hapl1[m,l] <- allist[[l]][hapl[m,l]]
+    }
+  }
+  hapl1 <- apply(hapl1,1,function(x) paste(x,sep="",collapse="."))
+  rownames(pp) <- hapl1
+  pp
 }
 
 modelSubsets <- function(obs, n_marker){
@@ -602,6 +631,18 @@ varsets1 <- function(l){
   B
 }
 
+geadrepr <- function(x,l){   ## calculates general geadic expression of each element of vector x
+  n <- length(l)
+  out <- array(0,c(length(x),n))
+  div <- c(1,cumprod(l[1:(n-1)]))
+  for(k in n:1){
+    r <- x%%div[k]
+    out[,k] <- (x-r)/div[k]
+    x <- r
+  }
+  out
+}
+
 gead <- function(x,l,n){   ## calculates geadic expression of each element of vectorx
   l <- rep(l,n)
   out <- array(0,c(length(x),n))
@@ -722,12 +763,21 @@ baseModelSim <- function(dataset,n_marker){
   out
 }
 
-CRLB <- function(mle, nloci, isPsi = FALSE, isPrev = FALSE){
+CRLB <- function(data, markers,idExists = TRUE, isPsi = FALSE, isPrev = FALSE, allelesName=TRUE){
+  mle <- MLE(data, markers, idExists = idExists, allelesName = FALSE)
+  nloci <- data[[3]][markers]
   if(isPsi){
     if(isPrev){
-      nameMean <- c('Mean_MOI', gsub("[p]", "q",rownames(mle[[2]])))
       out <- crlbPsiPrev(mle, nloci)
       var <- diag(out)
+      if(allelesName){
+        alleles <- strsplit(gsub("[p]", "", rownames(mle[[2]])), "[.]")
+        rownames(mle[[2]]) <- sapply(alleles, function(x) rank(as.numeric(x), nloci))
+        hapname <- paste("q",rownames(haplotypenaming(mle[[2]], data[[2]])), sep = "")
+      }else{
+        hapname <- rownames(mle[[2]])
+      }
+      nameMean <- c('Mean_MOI', hapname)
       names(var) <- nameMean
       rownames(out) <- nameMean
       colnames(out) <- nameMean
@@ -735,9 +785,16 @@ CRLB <- function(mle, nloci, isPsi = FALSE, isPrev = FALSE){
       names(out) <- c('Covariance matrix', 'Variance')
       out
     }else {
-      nameMean <- c('Mean_MOI', rownames(mle[[2]]))
       out <- crlbPsi(mle, nloci)
       var <- diag(out)
+      if(allelesName){
+        alleles <- strsplit(gsub("[p]", "", rownames(mle[[2]])), "[.]")
+        rownames(mle[[2]]) <- sapply(alleles, function(x) rank(as.numeric(x), nloci))
+        hapname <- paste("p",rownames(haplotypenaming(mle[[2]], data[[2]])), sep = "")
+      }else{
+        hapname <- rownames(mle[[2]])
+      }
+      nameMean <- c('Mean_MOI', hapname)
       names(var) <- nameMean
       rownames(out) <- nameMean
       colnames(out) <- nameMean
@@ -749,9 +806,16 @@ CRLB <- function(mle, nloci, isPsi = FALSE, isPrev = FALSE){
     out <- round(solve(FIM(mle, nloci)),3)
     out <- out[-nrow(out), -ncol(out)]
     var <- diag(out)
-    names(var) <- c('Lambda', rownames(mle[[2]]))
-      rownames(out) <- c('Lambda', rownames(mle[[2]]))
-      colnames(out) <- c('Lambda', rownames(mle[[2]]))
+    if(allelesName){
+      alleles <- strsplit(gsub("[p]", "", rownames(mle[[2]])), "[.]")
+      rownames(mle[[2]]) <- sapply(alleles, function(x) rank(as.numeric(x), nloci))
+      hapname <- paste("p",rownames(haplotypenaming(mle[[2]], data[[2]])), sep = "")
+    }else{
+      hapname <- rownames(mle[[2]])
+    }
+    names(var) <- c('Lambda', hapname)
+    rownames(out) <- c('Lambda', hapname)
+    colnames(out) <- c('Lambda', hapname)
     out <- list(out, var)
     names(out) <- c('Covariance matrix', 'Variance')
     out
@@ -913,7 +977,12 @@ prev0 <- function(mle){
   mle
 }
 
-PREV <- function(dataset,n_marker,idExists=TRUE, plugin=NULL, isCI=FALSE, replCI=10000, alpha=0.05){
+PREV <- function(data, markers, idExists=TRUE, plugin=NULL, isCI=FALSE, replCI=10000, alpha=0.05, allelesName=TRUE){
+  
+  dataset <- data[[1]][,markers]
+  alleleList <- data[[2]][markers]
+  n_marker <- data[[3]][markers]
+  
   ### Dropping Missing data in dataset
   samplesWithMissingData <- rowSums(dataset == 0) > 0
   dataset <- dataset[!samplesWithMissingData,]
@@ -941,14 +1010,23 @@ PREV <- function(dataset,n_marker,idExists=TRUE, plugin=NULL, isCI=FALSE, replCI
   mixRadixTableOfHap <- array(0,c(nh,nLoci))
   for(k in 1:nLoci){ #for each locus
     re <- rnames%%rev(mixRadixBaseCumulativeProduct)[k]
-    mixRadixTableOfHap[,(nLoci-k+1)] <- (rnames-re)/rev(mixRadixBaseCumulativeProduct)[k]
+    mixRadixTableOfHap[,(nLoci-k+1)] <- as.character((rnames-re)/rev(mixRadixBaseCumulativeProduct)[k]+1)
     rnames <- re
   }
-  mixRadixTableOfHap <- mixRadixTableOfHap+1
-  for(i in 1:nh){
-    rnames[i] <- paste(mixRadixTableOfHap[i,], collapse = '.')
+  #mixRadixTableOfHap <- mixRadixTableOfHap+1
+  if(allelesName){
+    prevEstimates <- haplotypenaming(prevEstimates,alleleList)
+    for (i in 1:length(alleleList)){
+      mixRadixTableOfHap[,i] <- alleleList[[i]][as.numeric(mixRadixTableOfHap[,i])]
+    }
+  }else {
+    for(i in 1:nh){
+      rnames[i] <- paste(mixRadixTableOfHap[i,], collapse = '.')
+    }
+    rownames(prevEstimates) <- rnames
+    mixRadixTableOfHap <- apply(mixRadixTableOfHap, 2, as.numeric)
   }
-  rownames(prevEstimates) <- rnames
+  colnames(mixRadixTableOfHap) <- names(n_marker)
 
   # Bootstrap CIs
   if(isCI){
