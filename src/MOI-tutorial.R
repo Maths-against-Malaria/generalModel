@@ -4,13 +4,10 @@
 #                from genomic/molecular data
 # Created by   : Christian Tsoungui Obama
 # Created on   : 27.10.23
-# Last modified: 23.12.24
+# Last modified: 06.01.25
 
 # Load external resources
-source('/home/johndoe/documents/src/model.R')
-
-# Install the necessary packages if necessary
-#install.packages('openxlsx')   # uncomment this line to install openxlsx
+source('/home/johndoe/documents//src/MOI-MLE.R')
 
 # Load libraries
 library(openxlsx)
@@ -18,10 +15,10 @@ library(openxlsx)
 #################################
 ### Import Datasets
 ##################################
-datasetNatural <- read.xlsx('/home/johndoe/documents/exampleDatasets/dataset.xlsx', 1)
+datasetNatural <- read.xlsx('/home/johndoe/documents/exampleDataset/dataset.xlsx', 1)
 
 # Transform the data to the standard format
-dataset <- datasetToStandard(datasetNatural, 2:ncol(datasetNatural))
+data <- datasetFormat(datasetNatural, 2:ncol(datasetNatural))
 
 #################################
 ### Estimate MLEs
@@ -58,10 +55,10 @@ PREV(dataset, markers, idExists = FALSE, isCI=TRUE, replCI = 15000, alpha = 0.10
 ##################################
 ## Calculate covariance matrix for MOI parameter and frequencies
 markers <- 1:2
-CRLB(dataset, markers, idExists = FALSE)
+FI(dataset, markers, idExists = FALSE)
 
 ## Calculate covariance matrix for mean MOI and frequencies
-CRLB(dataset, markers, idExists = FALSE, isPsi = TRUE)
+FI(dataset, markers, idExists = FALSE, isPsi = TRUE)
 
 ## Calculate covariance matrix for mean MOI and prevalence
-CRLB(dataset, markers, idExists = FALSE, isPsi = TRUE, isPrev = TRUE, allelesName = FALSE)
+FI(dataset, markers, idExists = FALSE, isPsi = TRUE, isPrev = TRUE, allelesName = FALSE)
