@@ -41,7 +41,7 @@ MLE <- function(data, markers, plugin=NULL, isCI=FALSE, isBC=FALSE, replBC=10000
   }
   
   if(allelesName){
-    freqEstim <- hapname(freqEstim,alleleList)
+    freqEstim <- hapName(freqEstim,alleleList)
     for (i in 1:length(alleleList)){
       mixRadixTableOfHap[,i] <- alleleList[[i]][as.numeric(mixRadixTableOfHap[,i])]
     }
@@ -1118,7 +1118,7 @@ PREV <- function(data, markers, idExists=TRUE, plugin=NULL, isCI=FALSE, replCI=1
   }
   #mixRadixTableOfHap <- mixRadixTableOfHap+1
   if(allelesName){
-    prevEstimates <- hapname(prevEstimates,alleleList)
+    prevEstimates <- hapName(prevEstimates,alleleList)
     for (i in 1:length(alleleList)){
       mixRadixTableOfHap[,i] <- alleleList[[i]][as.numeric(mixRadixTableOfHap[,i])]
     }

@@ -45,7 +45,7 @@ pairwiseLD(data, markersPair, isCI=TRUE, replCI = 20000, alpha = 0.10)
 ##################################
 ## Estimating haplotype prevalence and MOI using a 90% confidence interval and 15000 bootstrap replicates
 markers <- 1:2
-PREV(data, markers, isCI=TRUE, replCI = 15000, alpha = 0.10)
+PREV(data, markers, isCI=TRUE, replCI = 15, alpha = 0.10)
 
 #################################
 ### Asymptotic variance of MLEs
