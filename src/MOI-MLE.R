@@ -39,7 +39,7 @@ MLE <- function(data, markers, plugin=NULL, isCI=FALSE, isBC=FALSE, replBC=10000
     mixRadixTableOfHap[,(nLoci-k+1)] <- as.character((rnames-re)/rev(mixRadCumProd)[k] + 1)
     rnames <- re
   }
-  #mixRadixTableOfHap <- mixRadixTableOfHap+1
+  
   if(allelesName){
     freqEstim <- hapname(freqEstim,alleleList)
     for (i in 1:length(alleleList)){
@@ -396,7 +396,7 @@ datasetXNx <- function(data){
   list(obs, nObsVec)
 }
 
-allHaplotypes <- function(GA){
+allHap <- function(GA){
   nLoci <- length(GA)
   H <- array(0, c(prod(GA),nLoci))
   for(i in 1:(nLoci-1)){
@@ -768,12 +768,10 @@ baseModelSim <- function(data,GA){
 
 FI <- function(data, markers, isPsi = FALSE, isPrev = FALSE, allelesName=TRUE){
   dat <- datasetFormat(data, 2:ncol(data))
-  #dataset <- dat[[1]][,markers]
   alleleList <- dat[[2]][markers]
   GA <- dat[[3]][markers]
 
   mle <- MLE(data, markers, allelesName = FALSE)
-  #GA <- data[[3]][markers]
 
   if(isPsi){
     if(isPrev){
@@ -953,6 +951,8 @@ FIM <- function(mle, GA){
 }
 
 FIM.obs <- function(mle, GA){
+
+  mle <- 
   lambda <- mle[[1]]
   freq <- mle[[2]]
   hapnames <- mle[[3]]
@@ -1172,4 +1172,25 @@ dGdPi <- function(lambda, pp){
 
 dGdL <- function(lambda, pp){
   pp*exp(-lambda*pp)/(1-exp(-lambda))-exp(lambda)*(1-exp(-lambda*pp))/(1-exp(-lambda))^2
+}
+
+dataGen <- function(P,lambda, N, GA){ 
+  H <- allHap(GA)                   
+  out <- matrix(0, nrow=N, ncol=length(GA))
+  m <- cPoiss(lambda, N)              
+  for(j in 1:N){                     
+    s <- rmultinom(1, m[j], P) 
+    out[j,] <- observ(H[s!=0,], GA) 
+  }
+  out
+}
+
+observ <- function(M, GA){
+  M <- data.frame(matrix(M, ncol=length(GA)))
+  alleles <- lapply(GA, function(x) seq(0, x-1)) 
+  xx <- lapply(M,function(x) sort(unique(x)))
+  detectAllel <- Map(function(x,y) is.element(y,x), xx ,alleles) 
+  yy <- lapply(GA, function(x) 2^(0:(x-1))) 
+
+  mapply('%*%',detectAllel,yy)
 }
