@@ -15,15 +15,15 @@ MLE <- function(data, markers, plugin=NULL, isCI=FALSE, isBC=FALSE, replBC=10000
   GA <- dat[[3]][markers]
 
   ### Dropping Missing data in dataset
-  samplesWithMissingData <- rowSums(dataset == 0) > 0
-  dataset <- dataset[!samplesWithMissingData,]
+  missData <- rowSums(dataset == 0) > 0
+  dataset <- dataset[!missData,]
 
   ### Actual sample size
-  sampleSizeWithNoMissingData <- nrow(dataset)
+  Neff <- nrow(dataset)
   XNx  <- datasetXNx(dataset)
-  obs <<- XNx[[1]]
-  nObsVec <- XNx[[2]]
-  nLoci <- ncol(obs)
+  X <- XNx[[1]]
+  Nx <- XNx[[2]]
+  nLoci <- ncol(X)
 
   # MLEs
   mle <- MLEBC(dataset, GA, isBC=isBC, replBC=replBC, plugin=plugin)
@@ -58,13 +58,13 @@ MLE <- function(data, markers, plugin=NULL, isCI=FALSE, isBC=FALSE, replBC=10000
   # Bootstrap CIs
   if(isCI){
     nHap  <- length(freqEstim)
-    N <<- sum(nObsVec)
-    probaObs  <<- nObsVec/N
+    N <- sum(Nx)
+    probaObs  <- Nx/N
     arrayBootEstim <- array(0, dim = c((nHap+1), replCI=replCI))
     rownames(arrayBootEstim) <- c('lambda',(rnames1+1))
-    observation <<- seq_along(nObsVec)
+    observation <- seq_along(Nx)
     for (bootRepl in 1:replCI){
-      bootstrappedListOfDatasets <- bootstrapDataset()
+      bootstrappedListOfDatasets <- bootstrapDataset(X, N, probaObs)
       bootEstim <- MLEPluginChoice(bootstrappedListOfDatasets, GA, plugin=plugin)
       hap    <- as.integer(rownames(bootEstim[[2]]))
       arrayBootEstim[1,bootRepl]  <- unlist(bootEstim[[1]])
@@ -80,10 +80,10 @@ MLE <- function(data, markers, plugin=NULL, isCI=FALSE, isBC=FALSE, replBC=10000
     }
     freqEstimCI <- cbind(freqEstim,perc[2:(nHap+1),])
     colnames(freqEstimCI) <- c('', paste0(as.character((alpha/2)*100), '%'), paste0(as.character((1-alpha/2)*100), '%'))
-    mle <- list(lbdaEstim, freqEstimCI, mixRadixTableOfHap, sampleSizeWithNoMissingData)
+    mle <- list(lbdaEstim, freqEstimCI, mixRadixTableOfHap, Neff)
     names(mle) <- c('lambda', 'haplotypes_frequencies', 'detected_haplotypes', 'used_sample_size')
   }else{
-    mle <- list(lbdaEstim, freqEstim, mixRadixTableOfHap, sampleSizeWithNoMissingData)
+    mle <- list(lbdaEstim, freqEstim, mixRadixTableOfHap, Neff)
     names(mle) <- c('lambda', 'haplotypes_frequencies', 'detected_haplotypes', 'used_sample_size')
   }
   rownames(mle[[2]]) <- paste("p", rownames(mle[[2]]), sep="") 
@@ -92,22 +92,22 @@ MLE <- function(data, markers, plugin=NULL, isCI=FALSE, isBC=FALSE, replBC=10000
 
 MLEBC <- function(data, GA, isBC=FALSE, replBC=10000, plugin=NULL){
   isMissingData <- rowSums(data == 0) == 0
-  data <<- data[isMissingData,]
+  data <- data[isMissingData,]
   NEff <- nrow(data)
   dataset <- datasetXNx(data)
   mle <- MLEPluginChoice(dataset, GA, plugin=plugin)
   hap <- as.numeric(rownames(mle[[2]])) - 1
   nHaplotypes <- length(mle[[2]])
-  obs <<- dataset[[1]]
-  nObsVec  <<- dataset[[2]]
+  X <- dataset[[1]]
+  Nx  <- dataset[[2]]
   isFreqZero <- round(mle[[2]],2)==0
   if(isBC){
-    N <<- sum(nObsVec)
-    probaObs <<- nObsVec/N
+    N <- sum(Nx)
+    probaObs <- Nx/N
     arrayBootEstim <- array(0, dim = c((nHaplotypes+1), replBC))
     rownames(arrayBootEstim) <- c('lambda',(hap+1))
     for(bootRepl in seq(replBC)){
-      bootDataset <- bootstrapDataset()
+      bootDataset <- bootstrapDataset(X, N, probaObs)
       bootEstim <- MLEPluginChoice(bootDataset, GA, plugin=plugin)
       hapl   <- as.numeric(rownames(bootEstim[[2]]))
       arrayBootEstim[1,bootRepl] <- unlist(bootEstim[[1]])
@@ -136,10 +136,10 @@ MLEPluginChoice <- function(data, GA, plugin=NULL){
 
 MLEPlugin <- function(data, GA, plugin){
   tol <- 10^-8 # Error tol
-  obs <- data[[1]]
-  nObsVec <- data[[2]]
-  allSubs <- modelSubs(obs, GA)
-  nObs <- nrow(obs)
+  X <- data[[1]]
+  Nx <- data[[2]]
+  allSubs <- modelSubs(X, GA)
+  nObs <- nrow(X)
   Ax <- allSubs[[1]]
   hapll <- allSubs[[2]]
   hapl1 <- unique(unlist(hapll))
@@ -174,7 +174,7 @@ MLEPlugin <- function(data, GA, plugin){
         CC <- CC + exlap*p
       }
       num <- num*pp
-      denom <- nObsVec[u]/denom
+      denom <- Nx[u]/denom
       denom <- la*denom
       Ccoeff <- Ccoeff + CC*denom
       Bcoeff <- Bcoeff + num*denom
@@ -291,9 +291,9 @@ baseModel <- function(data, GA){
   out
 }
 
-bootstrapDataset <- function(){
+bootstrapDataset <- function(X, N, probaObs){
   bootSamples <- rmultinom(1, N, probaObs)
-  bootDataset <- obs[rep(1:nrow(obs),bootSamples),]
+  bootDataset <- X[rep(1:nrow(X),bootSamples),]
   bootDataset  <- datasetXNx(bootDataset)
   bootDataset
 }
@@ -314,10 +314,10 @@ hapName <- function(pp, allist){ ## allist list with alleles per locos
   pp
 }
 
-modelSubs <- function(obs, GA){
-  nObs <- nrow(obs)
-  n  <- ncol(obs)
-  x  <- obs
+modelSubs <- function(X, GA){
+  nObs <- nrow(X)
+  n  <- ncol(X)
+  x  <- X
   #_____________________________
   # this calculates the list to pick proper haplotype freuencies, i.e. sets Ay
   hapll <- list()
@@ -378,22 +378,19 @@ modelSubs <- function(obs, GA){
 }
 
 datasetXNx <- function(data){
-  # Drop id column
-  
-  #data <- data[,-1]
   data.comp <- apply(data,1,function(x) paste(x,collapse="-"))
-  nObsVec <- table(data.comp)
-  nObsVec.names <- names(nObsVec)
-  obs <- t(sapply(nObsVec.names, function(x) unlist(strsplit(x,"-")) ))
-  rownames(obs) <- NULL
-  obs <- array(as.numeric(obs),dim(obs))
+  Nx <- table(data.comp)
+  Nx.names <- names(Nx)
+  X <- t(sapply(Nx.names, function(x) unlist(strsplit(x,"-")) ))
+  rownames(X) <- NULL
+  X <- array(as.numeric(X),dim(X))
 
   # Removing samples with missing information
-  sel <- rowSums(obs==0)==0
-  nObsVec <- nObsVec[sel]
-  obs <- obs[sel,]
+  sel <- rowSums(X==0)==0
+  Nx <- Nx[sel]
+  X <- X[sel,]
 
-  list(obs, nObsVec)
+  list(X, Nx)
 }
 
 allHap <- function(GA){
@@ -483,20 +480,20 @@ pairwiseLD <- function(data, markersPair, isCI=FALSE,replCI=10000, alpha=0.05){
   data <- datasetFormat(data, 2:ncol(data))
 
   XNx  <- datasetXNx(data[[1]][,markersPair])
-  obs <<- XNx[[1]]
-  GA <<- data[[3]][markersPair]
-  nObsVec <- XNx[[2]]
-  ldEstim <- pairwiseLDBase(XNx,data,markersPair)
+  X <- XNx[[1]]
+  GA <- data[[3]][markersPair]
+  Nx <- XNx[[2]]
+  ldEstim <- pairwiseLDBase(XNx,data,markersPair, GA)
 
   # Bootstrap CIs
   if(isCI){
-    N <<- sum(nObsVec)
-    probaObs <<- nObsVec/N
+    N <- sum(Nx)
+    probaObs <- Nx/N
     arrayBootEstim <- array(0, dim = c(2, replCI))
-    observation <<- seq_along(nObsVec)
+    observation <- seq_along(Nx)
     for (bootRepl in 1:replCI){
-      bootDataset <- bootstrapDataset()
-      bootEstim <- pairwiseLDBase(bootDataset,data,markersPair)
+      bootDataset <- bootstrapDataset(X, N, probaObs)
+      bootEstim <- pairwiseLDBase(bootDataset,data,markersPair,GA)
       arrayBootEstim[,bootRepl]  <- unlist(bootEstim)
     }
     arrayBootEstim <- arrayBootEstim[ , colSums(is.na(arrayBootEstim))==0]
@@ -511,7 +508,7 @@ pairwiseLD <- function(data, markersPair, isCI=FALSE,replCI=10000, alpha=0.05){
   out
 }
 
-pairwiseLDBase <- function(XNx, data, markersPair){
+pairwiseLDBase <- function(XNx, data, markersPair, GA){
   mle <- MLEPluginChoice(XNx, GA, plugin=NULL)
   freqEstim <- mle[[2]]
   freqEstim <- labelFreqEstim(data, freqEstim, markersPair)
@@ -663,7 +660,7 @@ baseModelSim <- function(data,GA){
   data <- data[!dat,]
 
   ### Actual sample size
-  #sampleSizeWithNoMissingData <- nrow(data)
+  #Neff <- nrow(data)
   XNx  <- datasetXNx(data)
   tol <- 10^-8 # Error tolerance
   X     <- XNx[[1]]
@@ -766,7 +763,7 @@ baseModelSim <- function(data,GA){
   out
 }
 
-FI <- function(data, markers, isPsi = FALSE, isPrev = FALSE, allelesName=TRUE){
+FI <- function(data, markers, isPsi = FALSE, isPrev = FALSE, allelesName=TRUE, isObserv = FALSE){
   dat <- datasetFormat(data, 2:ncol(data))
   alleleList <- dat[[2]][markers]
   GA <- dat[[3]][markers]
@@ -775,7 +772,7 @@ FI <- function(data, markers, isPsi = FALSE, isPrev = FALSE, allelesName=TRUE){
 
   if(isPsi){
     if(isPrev){
-      out <- FIPsiPrev(mle, GA)
+      out <- FIPsiPrev(data, markers, isObserv=isObserv)
       var <- diag(out)
       if(allelesName){
         alleles <- strsplit(gsub("[p]", "", rownames(mle[[2]])), "[.]")
@@ -792,7 +789,7 @@ FI <- function(data, markers, isPsi = FALSE, isPrev = FALSE, allelesName=TRUE){
       names(out) <- c('Covariance matrix', 'Variance')
       out
     }else {
-      out <- FIPsi(mle, GA)
+      out <- FIPsi(data, markers, isObserv=isObserv)
       var <- diag(out)
       if(allelesName){
         alleles <- strsplit(gsub("[p]", "", rownames(mle[[2]])), "[.]")
@@ -810,7 +807,11 @@ FI <- function(data, markers, isPsi = FALSE, isPrev = FALSE, allelesName=TRUE){
       out
     }
   }else {
-    out <- round(solve(FIM(mle, GA)),3)
+    if(isObserv){
+      out <- round(solve(FIMObs(data, markers)),5)
+    }else{
+      out <- round(solve(FIM(mle, GA)),5)
+    }
     out <- out[-nrow(out), -ncol(out)]
     var <- diag(out)
     if(allelesName){
@@ -830,9 +831,17 @@ FI <- function(data, markers, isPsi = FALSE, isPrev = FALSE, allelesName=TRUE){
   out
 }
 
-FIPsiPrev <- function(mle, GA){
-  I <- FIM(mle, GA)
+FIPsiPrev <- function(data, markers, isObserv = FALSE){
 
+  dat <- datasetFormat(data, 2:ncol(data))
+  GA <- dat[[3]][markers]
+  mle <- MLE(data, markers, allelesName = FALSE)
+  if(isObserv){
+    I <- FIMObs(data, markers)
+  }else{
+    I <- FIM(mle, GA)
+  }
+  
   lambda <- mle[[1]]
   dgdl <- c(dGdL(lambda,mle[[2]]))
   dgdpi <- c(dGdPi(lambda,mle[[2]]))
@@ -843,17 +852,24 @@ FIPsiPrev <- function(mle, GA){
   invJ <- solve(J)
   
   out <- invJ%*%solve(I)%*%t(invJ)
-  round(out[-nrow(out), -ncol(out)],3)
+  round(out[-nrow(out), -ncol(out)],5)
 }
 
-FIPsi <- function(mle, nloci){
-  I <- FIM(mle, nloci)
+FIPsi <- function(data, markers, isObserv = FALSE){
+  dat <- datasetFormat(data, 2:ncol(data))
+  GA <- dat[[3]][markers]
+  mle <- MLE(data, markers, allelesName = FALSE)
+  if(isObserv){
+    I <- FIMObs(data, markers)
+  }else{
+    I <- FIM(mle, GA)
+  }
 
   lambda <- mle[[1]]
   M <- diag(nrow(mle[[2]])+2)
   M[1,1] <- dPsi(lambda)
   out <- M%*%solve(I)%*%M
-  round(out[-nrow(out), -ncol(out)],3)
+  round(out[-nrow(out), -ncol(out)],5)
 }
 
 FIM <- function(mle, GA){
@@ -863,11 +879,11 @@ FIM <- function(mle, GA){
   N <- mle[[4]]
 
   #### Generate all possible observations given GA
-  obs  <- allObs(GA)
-  Nobs <- nrow(obs)
+  X  <- allObs(GA)
+  Nobs <- nrow(X)
 
-  # Find for each infection obs all components necessary for the computations
-  Ax <- modelSubs(obs, GA)[[1]]
+  # Find for each infection X all components necessary for the computations
+  Ax <- modelSubs(X, GA)[[1]]
 
   # Initialize the Fisher information matrix of degree d
   hapl <- rank(hapnames, GA)
@@ -950,28 +966,31 @@ FIM <- function(mle, GA){
   I
 }
 
-FIM.obs <- function(mle, GA){
+FIMObs <- function(data, markers){
+  dat <- datasetFormat(data, 2:ncol(data))
+  dataset <- dat[[1]][,markers]
+  GA <- dat[[3]][markers]
 
-  mle <- 
+  ### Dropping Missing data in dataset
+  missData <- rowSums(dataset == 0) > 0
+  dataset <- dataset[!missData,]
+
+  XNx  <- datasetXNx(dataset)
+  X <- XNx[[1]]
+  Nx <- XNx[[2]]
+
+  # MLEs
+  mle <- MLEBC(dataset, GA, isBC=FALSE, replBC=15000, plugin=NULL)
   lambda <- mle[[1]]
-  freq <- mle[[2]]
-  hapnames <- mle[[3]]
-  N <- mle[[4]]
+  pp <- mle[[2]]
 
-  #### Generate all possible observations given GA
-  obs  <- allObs(GA)
-  Nobs <- nrow(obs)
-
-  # Find for each infection obs all components necessary for the computations
-  Ax <- modelSubs(obs, GA)[[1]]
+  # Find for each infection X all components necessary for the computations
+  Ax <- modelSubs(X, GA)[[1]]
 
   # Initialize the Fisher information matrix of degree d
-  hapl <- rank(hapnames, GA)
-  rownames(freq) <- hapl
-  pp <- matrix(0, ncol=1, nrow = prod(GA)) 
-  pp[as.numeric(rownames(freq)),] <- freq
+  hapl <- as.numeric(rownames(mle[[2]]))
 
-  d <- nrow(freq)+2
+  d <- nrow(pp)+2
   diag.el <- diag(array(1:d^2,c(d,d)))[-1]
   diag.el <- diag.el[-length(diag.el)]
 
@@ -979,67 +998,69 @@ FIM.obs <- function(mle, GA){
   rownames(I) <- 1:d
   colnames(I) <- 1:d
 
-  elmo <- exp(lambda)-1
-
-  # Ipsi,psi
+  # Ilam,lam
   out <- 0
-  for(u in 1:Nobs){ # For each observation x in ScrO
+  for(u in seq(length(Nx))){ # For each sampled observation in X
     out1 <- 0
     out2 <- 0
-    for(k in 1:(Ax[[u]][[1]][[1]])){  # For each observation y in the sub-observation ScrAx
-        sump <- sum(pp[as.numeric(Ax[[u]][[4]][[k]]),])
-        vz   <- Ax[[u]][[3]][[k]]
-        out1 <- out1 + vz*GFunc(lambda,sump)   # GFunc to build Px
-        out2 <- out2 + vz*dGFunc(lambda,sump)  # dG/dl to build dPx/dlam
+    out3 <- 0
+    for(k in 1:Ax[[u]][[1]][[1]]){  # For each observation y in the sub-observation ScrAx
+      sump <- sum(pp[Ax[[u]][[4]][[k]],])
+      vz   <- Ax[[u]][[3]][[k]]
+      out1 <- out1 + vz*GFunc(lambda,sump)   # GFunc to build Px
+      out2 <- out2 + vz*dGdL(lambda,sump)    # dG/dl to build dPx/dlam
+      out3 <- out3 + vz*d2GdL(lambda,sump)   # d2G/dl2 to build d2Px/dlam2
     }
     if(out1 != 0){
-      out <- out + (out2^2)/out1 #Ill
+      out <- out + Nx[u]*((out2^2)/out1 - out3)/out1 #Ill
     }
   }
-  I[1,1] <- N*out#/(dPsi(lambda)^2)   # I_lam_lam
+  I[1,1] <- out   # I_lam_lam
 
   # Ipi,pj  new
-  out <- 0 * (freq%*%t(freq))
-  for(u in 1:Nobs){
+  out <- 0 * (pp%*%t(pp))
+  for(u in seq(length(Nx))){
     out1 <- 0
     out2 <- 0*pp
-    for(k in 1:Ax[[u]][[1]]){  # For each observation y in the sub-observation ScrAx
-      sump  <- sum(pp[as.numeric(Ax[[u]][[4]][[k]]),])
-      elp   <- exp(lambda*sump)
-      vz    <- Ax[[u]][[3]][[k]]
-      out1  <- out1 + vz*GFunc(lambda,sump)
-      out2[as.numeric(Ax[[u]][[4]][[k]]),1] <- out2[as.numeric(Ax[[u]][[4]][[k]]),1] + vz*lambda*elp/elmo   # dG/dpi * Indic
+    out3 <- 0*pp %*% t(pp)
+    for(k in 1:Ax[[u]][[1]][[1]]){  # For each observation y in the sub-observation ScrAx
+        sump  <- sum(pp[Ax[[u]][[4]][[k]],])
+        vz    <- Ax[[u]][[3]][[k]]
+        out1  <- out1 + vz*GFunc(lambda,sump)
+        out2[Ax[[u]][[4]][[k]],1]                 <- out2[Ax[[u]][[4]][[k]],1] + vz*dGdPi(lambda, sump)   # dG/dpi * Indici
+        out3[Ax[[u]][[4]][[k]],Ax[[u]][[4]][[k]]] <- out3[Ax[[u]][[4]][[k]],Ax[[u]][[4]][[k]]] + vz*d2GdPidPj(lambda,sump)  # d2G/dpidpj * Indici*indicj
     }
     if(out1 != 0){
-    out <- out + (out2 %*% t(out2/out1))[c(hapl), c(hapl)]
+    out <- out + Nx[u]*((out2 %*% t(out2/out1)) - out3)/out1
     }
   }
-  I[2:(d-1),2:(d-1)] <- N*out
+  I[2:(d-1),2:(d-1)] <- out
 
-  # Ipsi,pi
-  out <- 0*freq
-  for(u in 1:Nobs){
+  # Ilam,pi
+  out <- 0*pp
+  for(u in seq(length(Nx))){
     out1  <- 0
     out21 <- 0
     out22 <- 0*pp
-    for(k in 1:Ax[[u]][[1]]){  # For each observation y in the sub-observation ScrAx
-      sump  <- sum(pp[as.numeric(Ax[[u]][[4]][[k]]),])
-      elp   <- exp(lambda*sump)
+    out3 <- 0*pp
+    for(k in 1:Ax[[u]][[1]][[1]]){  # For each observation y in the sub-observation ScrAx
+      sump  <- sum(pp[Ax[[u]][[4]][[k]],])
       vz    <- Ax[[u]][[3]][[k]]
-      out1  <- out1  + vz*GFunc(lambda,sump)             # GFunc
-      out21 <- out21 + vz*dGFunc(lambda,sump)            # dG/dl
-      out22[as.numeric(Ax[[u]][[4]][[k]])] <- out22[as.numeric(Ax[[u]][[4]][[k]])] + vz*(lambda*elp/elmo)    # dG/dpi
+      out1  <- out1  + vz*GFunc(lambda,sump)           # GFunc
+      out21 <- out21 + vz*dGdL(lambda,sump)            # dG/dl
+      out22[Ax[[u]][[4]][[k]],1] <- out22[Ax[[u]][[4]][[k]],1] + vz*dGdPi(lambda, sump)    # dG/dpi
+      out3[Ax[[u]][[4]][[k]],1]  <- out3[Ax[[u]][[4]][[k]],1]  + vz*d2GdLPi(lambda, sump)  # d2GdLPi
     }
     if(out1 != 0){
-      out <- out + ((out21*out22)/out1)[c(hapl)]
+      out <- out + Nx[u]*(out21*out22/out1 - out3)/out1
     }
   }
-  tmpI <- N*out#/dPsi(lambda)
-  I[1,2:(d-1)] <- tmpI
-  I[2:(d-1),1] <- tmpI
+  
+  I[1,2:(d-1)] <- out
+  I[2:(d-1),1] <- out
 
   # Parameter space in Higher dimension
-  dbeta <- c(0,rep(1,nrow(hapl)),0)
+  dbeta <- c(0,rep(1,length(hapl)),0)
   I[,d] <- dbeta
   I[d,] <- dbeta
 
@@ -1087,19 +1108,19 @@ PREV <- function(data, markers, idExists=TRUE, plugin=NULL, isCI=FALSE, replCI=1
   GA <- data[[3]][markers]
   
   ### Dropping Missing data in dataset
-  samplesWithMissingData <- rowSums(dataset == 0) > 0
-  dataset <- dataset[!samplesWithMissingData,]
+  missData <- rowSums(dataset == 0) > 0
+  dataset <- dataset[!missData,]
 
   ### Actual sample size
-  sampleSizeWithNoMissingData <- nrow(dataset)
+  Neff <- nrow(dataset)
   XNx  <- datasetXNx(dataset)
 
   ### Dropping Missing data in dataset
-  samplesWithMissingData <- rowSums(dataset == 0) > 0
-  dataset <- dataset[!samplesWithMissingData,]
-  obs <<- XNx[[1]]
-  nObsVec <- XNx[[2]]
-  nLoci <- ncol(obs)
+  missData <- rowSums(dataset == 0) > 0
+  dataset <- dataset[!missData,]
+  X <- XNx[[1]]
+  Nx <- XNx[[2]]
+  nLoci <- ncol(X)
 
   mle <- MLEPluginChoice(XNx, GA, plugin=NULL)
   mle <- prev0(mle)
@@ -1134,13 +1155,13 @@ PREV <- function(data, markers, idExists=TRUE, plugin=NULL, isCI=FALSE, replCI=1
   # Bootstrap CIs
   if(isCI){
     nHap  <- length(prevEstimates)
-    N <<- sum(nObsVec)
-    probaObs  <<- nObsVec/N
+    N <- sum(Nx)
+    probaObs  <- Nx/N
     arrayBootEstim <- array(0, dim = c((nHap+1), replCI=replCI))
     rownames(arrayBootEstim) <- c('lambda',(rnames1+1))
-    observation <<- seq_along(nObsVec)
+    #observation <- seq_along(Nx)
     for (bootRepl in 1:replCI){
-      bootstrappedListOfDatasets <- bootstrapDataset()
+      bootstrappedListOfDatasets <- bootstrapDataset(X, N, probaObs)
       bootEstim <- prev0(MLEPluginChoice(bootstrappedListOfDatasets, GA, plugin=plugin))
       hap    <- as.integer(rownames(bootEstim[[2]]))
       arrayBootEstim[1,bootRepl]  <- unlist(bootEstim[[1]])
@@ -1156,10 +1177,10 @@ PREV <- function(data, markers, idExists=TRUE, plugin=NULL, isCI=FALSE, replCI=1
     }
     prevEstimCI <- cbind(prevEstimates,perc[2:(nHap+1),])
     colnames(prevEstimCI) <- c('', paste0(as.character((alpha/2)*100), '%'), paste0(as.character((1-alpha/2)*100), '%'))
-    mle <- list(lbdaEstim, prevEstimCI, mixRadixTableOfHap, sampleSizeWithNoMissingData)
+    mle <- list(lbdaEstim, prevEstimCI, mixRadixTableOfHap, Neff)
     names(mle) <- c('lambda', 'haplotypes_prevalence', 'detected_haplotypes', 'used_sample_size')
   }else{
-    mle <- list(lbdaEstim, prevEstimates, mixRadixTableOfHap, sampleSizeWithNoMissingData)
+    mle <- list(lbdaEstim, prevEstimates, mixRadixTableOfHap, Neff)
     names(mle) <- c('lambda', 'haplotypes_prevalence', 'detected_haplotypes', 'used_sample_size')
   }
   rownames(mle[[2]]) <- paste("q", rownames(mle[[2]]), sep="") 
@@ -1167,11 +1188,26 @@ PREV <- function(data, markers, idExists=TRUE, plugin=NULL, isCI=FALSE, replCI=1
 }
 
 dGdPi <- function(lambda, pp){
-  lambda*exp(-lambda*pp)/(1-exp(-lambda))
+  elmo <- exp(lambda) - 1
+  lambda*exp(lambda*pp)/elmo
 }
 
 dGdL <- function(lambda, pp){
   pp*exp(-lambda*pp)/(1-exp(-lambda))-exp(lambda)*(1-exp(-lambda*pp))/(1-exp(-lambda))^2
+}
+
+d2GdL <- function(lambda, pp){
+  elmo <- exp(lambda) - 1
+  pp^2*exp(lambda*pp)/elmo - 2*pp*exp(lambda*(pp+1))/elmo^2 - exp(lambda)*(exp(lambda*pp)-1)/elmo^2 + 2*exp(2*lambda)*(exp(lambda*pp)-1)/elmo^3
+}
+
+d2GdPidPj <- function(lambda, pp){
+  lambda^2*exp(lambda*pp)/(exp(lambda)-1)
+}
+
+d2GdLPi <- function(lambda, pp){
+  elmo <- exp(lambda) - 1
+  ((lambda*pp + 1)*exp(lambda*pp)/elmo - lambda*exp(lambda*(pp+1))/(elmo^2))
 }
 
 dataGen <- function(P,lambda, N, GA){ 

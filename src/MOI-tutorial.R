@@ -38,14 +38,14 @@ MLE(data, markers, isBC = TRUE, replBC = 20000, isCI = TRUE, replCI = 15000, alp
 
 # Finding pairwise LD between two loci (,i.e., at 1st and 4th column), using D' and r-squared with a 90% confidence interval
 markersPair <- c(1,4)
-pairwiseLD(data, markersPair, isCI=TRUE, replCI = 20000, alpha = 0.10)
+pairwiseLD(data, markersPair, isCI = TRUE, replCI = 20000, alpha = 0.10)
 
 #################################
 ### Estimate prevalence
 ##################################
 ## Estimating haplotype prevalence and MOI using a 90% confidence interval and 15000 bootstrap replicates
 markers <- 1:2
-PREV(data, markers, isCI=TRUE, replCI = 15, alpha = 0.10)
+PREV(data, markers, isCI = TRUE, replCI = 15000, alpha = 0.10)
 
 #################################
 ### Asymptotic variance of MLEs
@@ -55,7 +55,7 @@ markers <- 1:2
 FI(data, markers)
 
 ## Calculate covariance matrix for mean MOI and frequencies
-FI(data, markers, isPsi = TRUE)
+FI(data, markers, isPsi = TRUE, isObserv = TRUE)
 
 ## Calculate covariance matrix for mean MOI and prevalence
 FI(data, markers, isPsi = TRUE, isPrev = TRUE, allelesName = FALSE)
