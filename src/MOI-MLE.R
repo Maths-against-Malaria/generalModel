@@ -779,7 +779,7 @@ FI <- function(data, markers, isPsi = FALSE, isPrev = FALSE, allelesName=TRUE, i
         rownames(mle[[2]]) <- sapply(alleles, function(x) rank(as.numeric(x), GA))
         hapname <- paste("q",rownames(hapName(mle[[2]], alleleList)), sep = "")
       }else{
-        hapname <- rownames(mle[[2]])
+        hapname <-  gsub("[p]", "q", rownames(mle[[2]]))#rownames(mle[[2]])
       }
       nameMean <- c('Mean_MOI', hapname)
       names(var) <- nameMean
@@ -852,7 +852,7 @@ FIPsiPrev <- function(data, markers, isObserv = FALSE){
   invJ <- solve(J)
   
   out <- invJ%*%solve(I)%*%t(invJ)
-  round(out[-nrow(out), -ncol(out)],5)
+  round(out[-nrow(out), -ncol(out)],6)
 }
 
 FIPsi <- function(data, markers, isObserv = FALSE){
@@ -899,7 +899,7 @@ FIM <- function(mle, GA){
   rownames(I) <- 1:d
   colnames(I) <- 1:d
 
-  elmo <- exp(lambda)-1
+  #elmo <- exp(lambda)-1
 
   # Ipsi,psi
   out <- 0
@@ -910,7 +910,7 @@ FIM <- function(mle, GA){
         sump <- sum(pp[as.numeric(Ax[[u]][[4]][[k]]),])
         vz   <- Ax[[u]][[3]][[k]]
         out1 <- out1 + vz*GFunc(lambda,sump)   # GFunc to build Px
-        out2 <- out2 + vz*dGFunc(lambda,sump)  # dG/dl to build dPx/dlam
+        out2 <- out2 + vz*dGdL(lambda,sump)  # dG/dl to build dPx/dlam
     }
     if(out1 != 0){
       out <- out + (out2^2)/out1 #Ill
@@ -923,15 +923,15 @@ FIM <- function(mle, GA){
   for(u in 1:Nobs){
     out1 <- 0
     out2 <- 0*pp
-    for(k in 1:Ax[[u]][[1]]){  # For each observation y in the sub-observation ScrAx
+    for(k in 1:Ax[[u]][[1]][[1]]){  # For each observation y in the sub-observation ScrAx
       sump  <- sum(pp[as.numeric(Ax[[u]][[4]][[k]]),])
-      elp   <- exp(lambda*sump)
+      #elp   <- exp(lambda*sump)
       vz    <- Ax[[u]][[3]][[k]]
       out1  <- out1 + vz*GFunc(lambda,sump)
-      out2[as.numeric(Ax[[u]][[4]][[k]]),1] <- out2[as.numeric(Ax[[u]][[4]][[k]]),1] + vz*lambda*elp/elmo   # dG/dpi * Indic
+      out2[as.numeric(Ax[[u]][[4]][[k]]),1] <- out2[as.numeric(Ax[[u]][[4]][[k]]),1] + vz*dGdPi(lambda, sump)# lambda*elp/elmo   # dG/dpi * Indic
     }
     if(out1 != 0){
-    out <- out + (out2 %*% t(out2/out1))[c(hapl), c(hapl)]
+    out <- out + (out2 %*% t(out2/out1))#[c(hapl), c(hapl)]
     }
   }
   I[2:(d-1),2:(d-1)] <- N*out
@@ -942,16 +942,16 @@ FIM <- function(mle, GA){
     out1  <- 0
     out21 <- 0
     out22 <- 0*pp
-    for(k in 1:Ax[[u]][[1]]){  # For each observation y in the sub-observation ScrAx
+    for(k in 1:Ax[[u]][[1]][[1]]){  # For each observation y in the sub-observation ScrAx
       sump  <- sum(pp[as.numeric(Ax[[u]][[4]][[k]]),])
-      elp   <- exp(lambda*sump)
+     # elp   <- exp(lambda*sump)
       vz    <- Ax[[u]][[3]][[k]]
       out1  <- out1  + vz*GFunc(lambda,sump)             # GFunc
-      out21 <- out21 + vz*dGFunc(lambda,sump)            # dG/dl
-      out22[as.numeric(Ax[[u]][[4]][[k]])] <- out22[as.numeric(Ax[[u]][[4]][[k]])] + vz*(lambda*elp/elmo)    # dG/dpi
+      out21 <- out21 + vz*dGdL(lambda,sump)            # dG/dl
+      out22[as.numeric(Ax[[u]][[4]][[k]])] <- out22[as.numeric(Ax[[u]][[4]][[k]])] + vz*dGdPi(lambda, sump)#(lambda*elp/elmo)    # dG/dpi
     }
     if(out1 != 0){
-      out <- out + ((out21*out22)/out1)[c(hapl)]
+      out <- out + ((out21*out22)/out1)#[c(hapl)]
     }
   }
   tmpI <- N*out#/dPsi(lambda)

@@ -55,7 +55,7 @@ markers <- 1:2
 FI(data, markers)
 
 ## Calculate covariance matrix for mean MOI and frequencies
-FI(data, markers, isPsi = TRUE, isObserv = TRUE)
+FI(data, markers, isPsi = TRUE)
 
 ## Calculate covariance matrix for mean MOI and prevalence
-FI(data, markers, isPsi = TRUE, isPrev = TRUE, allelesName = FALSE)
+out <- FI(data, markers, isPsi = TRUE, isPrev = TRUE, isObserv = FALSE)
