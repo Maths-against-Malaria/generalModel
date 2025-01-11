@@ -4,7 +4,7 @@
 #                from genomic/molecular data
 # Created by   : Christian Tsoungui Obama
 # Created on   : 27.10.23
-# Last modified: 06.01.25
+# Last modified: 11.01.25
 
 # Load external resources
 source('/Users/christian/Documents/Phd/models/generalModel/src/MOI-MLE.R')
@@ -58,4 +58,4 @@ FI(data, markers)
 FI(data, markers, isPsi = TRUE)
 
 ## Calculate covariance matrix for mean MOI and prevalence
-FI(data, markers, isPsi = TRUE, isPrev = TRUE, isObserv = TRUE)
+FI(data, markers, isPsi = TRUE, isPrev = TRUE, allelesName = FALSE, isObserv = FALSE)

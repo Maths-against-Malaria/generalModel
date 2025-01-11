@@ -655,114 +655,6 @@ gead <- function(x,l,n){   ## calculates geadic expression of each element of ve
   out
 }
 
-baseModelSim <- function(data,GA){
-  dat <- rowSums(data == 0) > 0
-  data <- data[!dat,]
-
-  ### Actual sample size
-  #Neff <- nrow(data)
-  XNx  <- datasetXNx(data)
-  tol <- 10^-8 # Error tolerance
-  X     <- XNx[[1]]
-  Nx <- XNx[[2]]
-  N <- sum(Nx)
-  allSubs <- modelSubs(X, GA)
-  nObs <- nrow(X)
-  Ax <- allSubs[[1]]
-  hapll <- allSubs[[2]]
-  hapl1 <- unique(unlist(hapll))
-
-  # initialize parameters
-  H <- length(hapl1)
-  pp <- array(rep(1/H,H),c(H,1))
-  rownames(pp) <- hapl1
-
-  #initial list
-  num0  <- pp*0
-  cond1 <- 1  ## condition to stop EM alg!
-  la    <- 2
-  num   <- num0
-  rownames(num)    <- hapl1
-  Bcoeff           <- num0
-  rownames(Bcoeff) <- hapl1
-  t <- 0
-  globalNumberOfIterations <- 500
-  nIterationsLambda <- 300
-  while(cond1>tol && t<globalNumberOfIterations){
-    t <- t+1
-    Ccoeff <- 0
-    Bcoeff <- num0 #reset B coefficients to 0 in next iteration
-    for(u in 1:nObs){
-      denom <- 0
-      num <- num0
-      CC <- 0
-      for(k in 1:Ax[[u]][[1]]){
-        p <- sum(pp[Ax[[u]][[4]][[k]],])
-        vz <- Ax[[u]][[3]][[k]]
-        lap <- la*p
-        exlap <- vz*exp(lap)
-        denom <- denom + exlap-vz
-        num[Ax[[u]][[4]][[k]],] <- num[Ax[[u]][[4]][[k]],]+ exlap # Sum with indicator function
-        CC <- CC + exlap*p
-      }
-      num <- num*pp
-      denom <- Nx[u]/denom
-      denom <- la*denom
-      Ccoeff <- Ccoeff + CC*denom
-      Bcoeff <- Bcoeff + num*denom
-    }
-    Ccoeff <- Ccoeff/N
-
-    # Replacing NaN's in Ak by 0
-    cnt <- sum(is.nan(Bcoeff))
-    if(cnt > 0){
-      break
-    }else{
-      ppn <- Bcoeff/(sum(Bcoeff))
-    }
-
-    ### Newton step
-    cond2 <- 1
-    xt    <- Ccoeff   ### good initial condition
-    tau   <- 0
-    while(cond2 > tol && tau < nIterationsLambda){
-      tau <- tau + 1
-      ex  <- exp(-xt)
-      xtn <- xt + (1-ex)*(xt + Ccoeff*ex - Ccoeff)/(ex*xt+ex-1)
-      if(is.nan(xtn) || (tau == (nIterationsLambda-1)) || xtn < 0){
-        xtn <- runif(1, 0.1, 2.5)
-      }
-      cond2 <- abs(xtn-xt)
-      xt <- xtn
-    }
-    cond1 <- abs(xt-la)+sqrt(sum((pp-ppn)^2))
-    la <- xt
-    pp <- ppn
-  }
-  ## Ordering the frequencies
-  pp <- pp[order(as.numeric(rownames(pp))), ]
-
-  ## Setting the frequencies of the unobserved haplotypes to 0.0
-  nhapl <- prod(GA)
-
-  if(length(pp)<nhapl){
-    out <- t(pp)
-    name <- colnames(out)
-    cnt <- 0
-    for (i in 1:nhapl) {
-      if (is.element(as.character(i), name)){
-        cnt <- cnt + 1
-      }else{
-        pp <- append(pp, list(x = 0.0), i-1)
-      }
-    }
-  }
-  names(la) <- NULL
-  out <- list(la,unlist(pp))
-  names(out) <- c('lambda', 'p')
-  out
-}
-
 FI <- function(data, markers, isPsi = FALSE, isPrev = FALSE, allelesName=TRUE, isObserv = FALSE){
   dat <- datasetFormat(data, 2:ncol(data))
   alleleList <- dat[[2]][markers]
@@ -852,7 +744,7 @@ FIPsiPrev <- function(data, markers, isObserv = FALSE){
   invJ <- solve(J)
   
   out <- invJ%*%solve(I)%*%t(invJ)
-  round(out[-nrow(out), -ncol(out)],6)
+  round(out[-nrow(out), -ncol(out)],5)
 }
 
 FIPsi <- function(data, markers, isObserv = FALSE){
@@ -899,7 +791,7 @@ FIM <- function(mle, GA){
   rownames(I) <- 1:d
   colnames(I) <- 1:d
 
-  #elmo <- exp(lambda)-1
+  elmo <- exp(lambda)-1
 
   # Ipsi,psi
   out <- 0
@@ -910,7 +802,7 @@ FIM <- function(mle, GA){
         sump <- sum(pp[as.numeric(Ax[[u]][[4]][[k]]),])
         vz   <- Ax[[u]][[3]][[k]]
         out1 <- out1 + vz*GFunc(lambda,sump)   # GFunc to build Px
-        out2 <- out2 + vz*dGdL(lambda,sump)  # dG/dl to build dPx/dlam
+        out2 <- out2 + vz*dGFunc(lambda,sump)  # dG/dl to build dPx/dlam
     }
     if(out1 != 0){
       out <- out + (out2^2)/out1 #Ill
@@ -923,15 +815,15 @@ FIM <- function(mle, GA){
   for(u in 1:Nobs){
     out1 <- 0
     out2 <- 0*pp
-    for(k in 1:Ax[[u]][[1]][[1]]){  # For each observation y in the sub-observation ScrAx
+    for(k in 1:Ax[[u]][[1]]){  # For each observation y in the sub-observation ScrAx
       sump  <- sum(pp[as.numeric(Ax[[u]][[4]][[k]]),])
-      #elp   <- exp(lambda*sump)
+      elp   <- exp(lambda*sump)
       vz    <- Ax[[u]][[3]][[k]]
       out1  <- out1 + vz*GFunc(lambda,sump)
-      out2[as.numeric(Ax[[u]][[4]][[k]]),1] <- out2[as.numeric(Ax[[u]][[4]][[k]]),1] + vz*dGdPi(lambda, sump)# lambda*elp/elmo   # dG/dpi * Indic
+      out2[as.numeric(Ax[[u]][[4]][[k]]),1] <- out2[as.numeric(Ax[[u]][[4]][[k]]),1] + vz*lambda*elp/elmo   # dG/dpi * Indic
     }
     if(out1 != 0){
-    out <- out + (out2 %*% t(out2/out1))#[c(hapl), c(hapl)]
+    out <- out + (out2 %*% t(out2/out1))[c(hapl), c(hapl)]
     }
   }
   I[2:(d-1),2:(d-1)] <- N*out
@@ -942,16 +834,16 @@ FIM <- function(mle, GA){
     out1  <- 0
     out21 <- 0
     out22 <- 0*pp
-    for(k in 1:Ax[[u]][[1]][[1]]){  # For each observation y in the sub-observation ScrAx
+    for(k in 1:Ax[[u]][[1]]){  # For each observation y in the sub-observation ScrAx
       sump  <- sum(pp[as.numeric(Ax[[u]][[4]][[k]]),])
-     # elp   <- exp(lambda*sump)
+      elp   <- exp(lambda*sump)
       vz    <- Ax[[u]][[3]][[k]]
       out1  <- out1  + vz*GFunc(lambda,sump)             # GFunc
-      out21 <- out21 + vz*dGdL(lambda,sump)            # dG/dl
-      out22[as.numeric(Ax[[u]][[4]][[k]])] <- out22[as.numeric(Ax[[u]][[4]][[k]])] + vz*dGdPi(lambda, sump)#(lambda*elp/elmo)    # dG/dpi
+      out21 <- out21 + vz*dGFunc(lambda,sump)            # dG/dl
+      out22[as.numeric(Ax[[u]][[4]][[k]])] <- out22[as.numeric(Ax[[u]][[4]][[k]])] + vz*(lambda*elp/elmo)    # dG/dpi
     }
     if(out1 != 0){
-      out <- out + ((out21*out22)/out1)#[c(hapl)]
+      out <- out + ((out21*out22)/out1)[c(hapl)]
     }
   }
   tmpI <- N*out#/dPsi(lambda)
@@ -1007,7 +899,7 @@ FIMObs <- function(data, markers){
     for(k in 1:Ax[[u]][[1]][[1]]){  # For each observation y in the sub-observation ScrAx
       sump <- sum(pp[Ax[[u]][[4]][[k]],])
       vz   <- Ax[[u]][[3]][[k]]
-      out1 <- out1 + vz*GFunc(lambda,sump)   # GFunc to build Px
+      out1 <- out1 + vz*G(lambda,sump)   # G to build Px
       out2 <- out2 + vz*dGdL(lambda,sump)    # dG/dl to build dPx/dlam
       out3 <- out3 + vz*d2GdL(lambda,sump)   # d2G/dl2 to build d2Px/dlam2
     }
@@ -1026,7 +918,7 @@ FIMObs <- function(data, markers){
     for(k in 1:Ax[[u]][[1]][[1]]){  # For each observation y in the sub-observation ScrAx
         sump  <- sum(pp[Ax[[u]][[4]][[k]],])
         vz    <- Ax[[u]][[3]][[k]]
-        out1  <- out1 + vz*GFunc(lambda,sump)
+        out1  <- out1 + vz*G(lambda,sump)
         out2[Ax[[u]][[4]][[k]],1]                 <- out2[Ax[[u]][[4]][[k]],1] + vz*dGdPi(lambda, sump)   # dG/dpi * Indici
         out3[Ax[[u]][[4]][[k]],Ax[[u]][[4]][[k]]] <- out3[Ax[[u]][[4]][[k]],Ax[[u]][[4]][[k]]] + vz*d2GdPidPj(lambda,sump)  # d2G/dpidpj * Indici*indicj
     }
@@ -1046,7 +938,7 @@ FIMObs <- function(data, markers){
     for(k in 1:Ax[[u]][[1]][[1]]){  # For each observation y in the sub-observation ScrAx
       sump  <- sum(pp[Ax[[u]][[4]][[k]],])
       vz    <- Ax[[u]][[3]][[k]]
-      out1  <- out1  + vz*GFunc(lambda,sump)           # GFunc
+      out1  <- out1  + vz*G(lambda,sump)           # G
       out21 <- out21 + vz*dGdL(lambda,sump)            # dG/dl
       out22[Ax[[u]][[4]][[k]],1] <- out22[Ax[[u]][[4]][[k]],1] + vz*dGdPi(lambda, sump)    # dG/dpi
       out3[Ax[[u]][[4]][[k]],1]  <- out3[Ax[[u]][[4]][[k]],1]  + vz*d2GdLPi(lambda, sump)  # d2GdLPi
@@ -1065,32 +957,6 @@ FIMObs <- function(data, markers){
   I[d,] <- dbeta
 
   I
-}
-
-GFunc <- function(lambda, sumFreq){
-  elp   <- exp(lambda*sumFreq)
-  elmo  <- exp(lambda) - 1
-  (elp - 1)/elmo
-}
-
-dGFunc <- function(lambda, freq){
-  el <- exp(lambda)
-  elmo <- exp(lambda)-1
-  elp  <- exp(lambda*freq)
-
-  freq*elp/elmo - el*(elp - 1)/(elmo^2)
-}
-
-dPsi <- function(lambda){
-  eml <- 1-exp(-lambda)
-  1/eml - (lambda*exp(-lambda))/(eml^2)
-}
-
-rank <- function(hap, nloci){
-hap <- hap-1
-gk <- cumprod(nloci)
-rk <- hap%*%c(1,gk)[-(length(gk)+1)] + 1
-rk
 }
 
 prev0 <- function(mle){
@@ -1187,13 +1053,50 @@ PREV <- function(data, markers, idExists=TRUE, plugin=NULL, isCI=FALSE, replCI=1
   mle
 }
 
+rank <- function(hap, GA){
+  hap <- hap-1
+  gk <- cumprod(GA)
+  rk <- hap%*%c(1,gk)[-(length(gk)+1)] + 1
+  rk
+}
+
+G <- function(lambda, pp){
+  (exp(lambda*pp) - 1)/(exp(lambda) - 1)
+}
+
+GFunc <- function(lambda, sumFreq){
+  elp   <- exp(lambda*sumFreq)
+  elmo  <- exp(lambda) - 1
+  (elp - 1)/elmo
+}
+
+dGFunc <- function(lambda, freq){
+  el <- exp(lambda)
+  elmo <- exp(lambda)-1
+  elp  <- exp(lambda*freq)
+
+  freq*elp/elmo - el*(elp - 1)/(elmo^2)
+}
+# dG <- function(lambda, freq){
+#   el <- exp(lambda)
+#   elmo <- exp(lambda)-1
+#   elp  <- exp(lambda*freq)
+
+#   freq*elp/elmo - el*(elp - 1)/(elmo^2)
+# }
+
+dPsi <- function(lambda){
+  eml <- 1-exp(-lambda)
+  1/eml - (lambda*exp(-lambda))/(eml^2)
+}
+
 dGdPi <- function(lambda, pp){
-  elmo <- exp(lambda) - 1
-  lambda*exp(lambda*pp)/elmo
+  lambda*exp(lambda*pp)/(exp(lambda) - 1)
 }
 
 dGdL <- function(lambda, pp){
-  pp*exp(-lambda*pp)/(1-exp(-lambda))-exp(lambda)*(1-exp(-lambda*pp))/(1-exp(-lambda))^2
+  elmo <- exp(lambda)-1
+  pp*exp(lambda*pp)/elmo - exp(lambda)*(exp(lambda*pp)-1)/(elmo^2)
 }
 
 d2GdL <- function(lambda, pp){
