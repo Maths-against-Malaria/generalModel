@@ -2,7 +2,7 @@
 # Objective    : Contains implementation of the model (EM-algorithm) and supporting functions
 # Created by   : Christian Tsoungui Obama, Kristan. A. Schneider
 # Created on   : 15.08.23
-# Last modified : 06.01.25
+# Last modified: 11.01.25
 
 if (!requireNamespace("openxlsx", quietly = TRUE)) {
   install.packages("openxlsx")
@@ -801,8 +801,8 @@ FIM <- function(mle, GA){
     for(k in 1:(Ax[[u]][[1]][[1]])){  # For each observation y in the sub-observation ScrAx
         sump <- sum(pp[as.numeric(Ax[[u]][[4]][[k]]),])
         vz   <- Ax[[u]][[3]][[k]]
-        out1 <- out1 + vz*GFunc(lambda,sump)   # GFunc to build Px
-        out2 <- out2 + vz*dGFunc(lambda,sump)  # dG/dl to build dPx/dlam
+        out1 <- out1 + vz*G(lambda,sump)   # G to build Px
+        out2 <- out2 + vz*dGdL(lambda,sump)  # dG/dl to build dPx/dlam
     }
     if(out1 != 0){
       out <- out + (out2^2)/out1 #Ill
@@ -819,7 +819,7 @@ FIM <- function(mle, GA){
       sump  <- sum(pp[as.numeric(Ax[[u]][[4]][[k]]),])
       elp   <- exp(lambda*sump)
       vz    <- Ax[[u]][[3]][[k]]
-      out1  <- out1 + vz*GFunc(lambda,sump)
+      out1  <- out1 + vz*G(lambda,sump)
       out2[as.numeric(Ax[[u]][[4]][[k]]),1] <- out2[as.numeric(Ax[[u]][[4]][[k]]),1] + vz*lambda*elp/elmo   # dG/dpi * Indic
     }
     if(out1 != 0){
@@ -838,8 +838,8 @@ FIM <- function(mle, GA){
       sump  <- sum(pp[as.numeric(Ax[[u]][[4]][[k]]),])
       elp   <- exp(lambda*sump)
       vz    <- Ax[[u]][[3]][[k]]
-      out1  <- out1  + vz*GFunc(lambda,sump)             # GFunc
-      out21 <- out21 + vz*dGFunc(lambda,sump)            # dG/dl
+      out1  <- out1  + vz*G(lambda,sump)             # G
+      out21 <- out21 + vz*dGdL(lambda,sump)            # dG/dl
       out22[as.numeric(Ax[[u]][[4]][[k]])] <- out22[as.numeric(Ax[[u]][[4]][[k]])] + vz*(lambda*elp/elmo)    # dG/dpi
     }
     if(out1 != 0){
@@ -919,8 +919,8 @@ FIMObs <- function(data, markers){
         sump  <- sum(pp[Ax[[u]][[4]][[k]],])
         vz    <- Ax[[u]][[3]][[k]]
         out1  <- out1 + vz*G(lambda,sump)
-        out2[Ax[[u]][[4]][[k]],1]                 <- out2[Ax[[u]][[4]][[k]],1] + vz*dGdPi(lambda, sump)   # dG/dpi * Indici
-        out3[Ax[[u]][[4]][[k]],Ax[[u]][[4]][[k]]] <- out3[Ax[[u]][[4]][[k]],Ax[[u]][[4]][[k]]] + vz*d2GdPidPj(lambda,sump)  # d2G/dpidpj * Indici*indicj
+        out2[Ax[[u]][[4]][[k]],1]                 <- out2[Ax[[u]][[4]][[k]],1] + vz*dGdPi(lambda, sump)  
+        out3[Ax[[u]][[4]][[k]],Ax[[u]][[4]][[k]]] <- out3[Ax[[u]][[4]][[k]],Ax[[u]][[4]][[k]]] + vz*d2GdPidPj(lambda,sump) 
     }
     if(out1 != 0){
     out <- out + Nx[u]*((out2 %*% t(out2/out1)) - out3)/out1
@@ -1060,17 +1060,17 @@ rank <- function(hap, GA){
   rk
 }
 
-G <- function(lambda, pp){
-  (exp(lambda*pp) - 1)/(exp(lambda) - 1)
-}
+# G <- function(lambda, pp){
+#   (exp(lambda*pp) - 1)/(exp(lambda) - 1)
+# }
 
-GFunc <- function(lambda, sumFreq){
+G <- function(lambda, sumFreq){
   elp   <- exp(lambda*sumFreq)
   elmo  <- exp(lambda) - 1
   (elp - 1)/elmo
 }
 
-dGFunc <- function(lambda, freq){
+dGdL <- function(lambda, freq){
   el <- exp(lambda)
   elmo <- exp(lambda)-1
   elp  <- exp(lambda*freq)
@@ -1094,10 +1094,10 @@ dGdPi <- function(lambda, pp){
   lambda*exp(lambda*pp)/(exp(lambda) - 1)
 }
 
-dGdL <- function(lambda, pp){
-  elmo <- exp(lambda)-1
-  pp*exp(lambda*pp)/elmo - exp(lambda)*(exp(lambda*pp)-1)/(elmo^2)
-}
+# dGdL <- function(lambda, pp){
+#   elmo <- exp(lambda)-1
+#   pp*exp(lambda*pp)/elmo - exp(lambda)*(exp(lambda*pp)-1)/(elmo^2)
+# }
 
 d2GdL <- function(lambda, pp){
   elmo <- exp(lambda) - 1

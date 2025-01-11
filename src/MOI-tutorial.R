@@ -58,4 +58,4 @@ FI(data, markers)
 FI(data, markers, isPsi = TRUE)
 
 ## Calculate covariance matrix for mean MOI and prevalence
-FI(data, markers, isPsi = TRUE, isPrev = TRUE, allelesName = FALSE, isObserv = FALSE)
+FI(data, markers, isPsi = TRUE, isPrev = TRUE, allelesName = FALSE, isObserv = TRUE)
