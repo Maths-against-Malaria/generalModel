@@ -59,3 +59,15 @@ FI(data, markers, isPsi = TRUE)
 
 ## Calculate covariance matrix for mean MOI and prevalence
 FI(data, markers, isPsi = TRUE, isPrev = TRUE, allelesName = FALSE, isObserv = TRUE)
+
+#################################
+### Simulated data sets
+##################################
+## Generating simulated data sets in the inout format
+data <- datasetGen(c(0.45,0.25,0.2,0.1), 0.5, 100, c(2,2))
+
+## Converting simulated data
+dataC <- datasetXNx(data)
+
+## Deriving the MLEs
+baseModel(dataC, c(2,2))
