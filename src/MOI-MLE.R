@@ -237,9 +237,8 @@ baseModel <- function(data, GA){
           vz <- Ax[[u]][[3]][[k]]
           lap <- la*p
           exlap <- vz*exp(lap)
-          denom <- denom + exlap-vz  ##   = (1-)^(Nx-Ny)*(Exp(lambda*sum p)-1) = (1-)^(Nx-Ny)*G(sum p)
-          num[Ax[[u]][[4]][[k]],] <- num[Ax[[u]][[4]][[k]],]+ exlap#*pp[Ax[[u]][[1]][[k]],]
-          ## exlap =  (1-)^(Nx-Ny) G'(sum p)   --- denominator of generating functions cancels out!
+          denom <- denom + exlap-vz 
+          num[Ax[[u]][[4]][[k]],] <- num[Ax[[u]][[4]][[k]],]+ exlap
           CC <- CC + exlap*p
         }
         num <- num*pp
@@ -264,13 +263,11 @@ baseModel <- function(data, GA){
       la <- xt
       pp <- ppn
       if(stp == 120 & attemp < 50 ){ # if algorithm dod not converge within 120 steps try new initial condition
-        #print(attemp)
         attemp <- attemp + 1
         stp <- 0
         # new initial conditions
         
         tmp <- table(unlist(rep(lapply(Ax, function(x) x[[4]][[length(x[[4]])]]),Nx)))
-        #pp1 <- pp
         
         pp[names(tmp),] <- tmp/sum(tmp)
         num0 <- pp*0
@@ -1101,7 +1098,7 @@ d2GdLPi <- function(lambda, pp){
   ((lambda*pp + 1)*exp(lambda*pp)/elmo - lambda*exp(lambda*(pp+1))/(elmo^2))
 }
 
-dataGen <- function(P,lambda, N, GA){ 
+datasetGen <- function(P,lambda, N, GA){ 
   H <- allHap(GA)                   
   out <- matrix(0, nrow=N, ncol=length(GA))
   m <- cPoiss(lambda, N)              

@@ -64,7 +64,7 @@ FI(data, markers, isPsi = TRUE, isPrev = TRUE, allelesName = FALSE, isObserv = T
 ### Simulated data sets
 ##################################
 ## Generating simulated data sets in the inout format
-data <- dataGen(c(0.45,0.25,0.2,0.1), 0.5, 100, c(2,2))
+data <- datasetGen(c(0.45,0.25,0.2,0.1), 0.5, 100, c(2,2))
 
 ## Converting simulated data
 dataC <- datasetXNx(data)
