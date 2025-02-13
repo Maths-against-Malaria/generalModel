@@ -62,10 +62,10 @@ MLE <- function(data, markers, plugin=NULL, isCI=FALSE, isBC=FALSE, replBC=10000
     probaObs  <- Nx/N
     arrayBootEstim <- array(0, dim = c((nHap+1), replCI=replCI))
     rownames(arrayBootEstim) <- c('lambda',(rnames1+1))
-    observation <- seq_along(Nx)
+    #observation <- seq_along(Nx)
     for (bootRepl in 1:replCI){
-      bootstrappedListOfDatasets <- bootstrapDataset(X, N, probaObs)
-      bootEstim <- MLEPluginChoice(bootstrappedListOfDatasets, GA, plugin=plugin)
+      bootDataset <- bootstrapDataset(X, N, probaObs)
+      bootEstim <- MLEBC(bootDataset, GA, isBC=isBC, replBC=replBC, plugin=plugin) #MLEPluginChoice(bootstrappedListOfDatasets, GA, plugin=plugin)
       hap    <- as.integer(rownames(bootEstim[[2]]))
       arrayBootEstim[1,bootRepl]  <- unlist(bootEstim[[1]])
       arrayBootEstim[as.character(hap),bootRepl] <- unlist(bootEstim[[2]])
@@ -91,16 +91,16 @@ MLE <- function(data, markers, plugin=NULL, isCI=FALSE, isBC=FALSE, replBC=10000
 }
 
 MLEBC <- function(data, GA, isBC=FALSE, replBC=10000, plugin=NULL){
-  isMissingData <- rowSums(data == 0) == 0
-  data <- data[isMissingData,]
-  NEff <- nrow(data)
-  dataset <- datasetXNx(data)
-  mle <- MLEPluginChoice(dataset, GA, plugin=plugin)
+  #isMissingData <- rowSums(data == 0) == 0
+  #data <- data[isMissingData,]
+  #NEff <- nrow(data)
+  mle <- MLEPluginChoice(data, GA, plugin=plugin)
   hap <- as.numeric(rownames(mle[[2]])) - 1
   nHaplotypes <- length(mle[[2]])
+  dataset <- datasetXNx(data)
   X <- dataset[[1]]
   Nx  <- dataset[[2]]
-  isFreqZero <- round(mle[[2]],2)==0
+  isFreqZero <- round(mle[[2]],2)==0 ### TODO: check step is necessary
   if(isBC){
     N <- sum(Nx)
     probaObs <- Nx/N
@@ -115,7 +115,7 @@ MLEBC <- function(data, GA, isBC=FALSE, replBC=10000, plugin=NULL){
       arrayBootEstim[as.character(hapl),bootRepl] <- tempBootFreqEstim
     }
     meanValueOfEstimates <- rowSums(arrayBootEstim)/replBC
-    meanValueOfEstimates[-1][isFreqZero] <- 0
+    meanValueOfEstimates[-1][isFreqZero] <- 0  ### Is used here
     BCLambda      <- 2*mle[[1]][1] - meanValueOfEstimates[1]
     BCFrequencies <- 2*mle[[2]] - meanValueOfEstimates[-1]
     biasCorrectedEstimates <- list(BCLambda, BCFrequencies)
@@ -126,6 +126,7 @@ MLEBC <- function(data, GA, isBC=FALSE, replBC=10000, plugin=NULL){
 }
 
 MLEPluginChoice <- function(data, GA, plugin=NULL){
+  data <- datasetXNx(data)
   if(is.null(plugin)){
     out <- baseModel(data, GA)               # calculates the uncorrected estimate
   }else{
@@ -291,7 +292,7 @@ baseModel <- function(data, GA){
 bootstrapDataset <- function(X, N, probaObs){
   bootSamples <- rmultinom(1, N, probaObs)
   bootDataset <- X[rep(1:nrow(X),bootSamples),]
-  bootDataset  <- datasetXNx(bootDataset)
+  #bootDataset  <- datasetXNx(bootDataset)
   bootDataset
 }
 
@@ -483,14 +484,14 @@ pairwiseLD <- function(data, markersPair, isCI=FALSE,replCI=10000, alpha=0.05){
   X <- XNx[[1]]
   GA <- data[[3]][markersPair]
   Nx <- XNx[[2]]
-  ldEstim <- pairwiseLDBase(XNx,data,markersPair, GA)
+  ldEstim <- pairwiseLDBase(data[[1]][,markersPair],data,markersPair, GA)
 
   # Bootstrap CIs
   if(isCI){
     N <- sum(Nx)
     probaObs <- Nx/N
     arrayBootEstim <- array(0, dim = c(2, replCI))
-    observation <- seq_along(Nx)
+    #observation <- seq_along(Nx)
     for (bootRepl in 1:replCI){
       bootDataset <- bootstrapDataset(X, N, probaObs)
       bootEstim <- pairwiseLDBase(bootDataset,data,markersPair,GA)
@@ -508,8 +509,8 @@ pairwiseLD <- function(data, markersPair, isCI=FALSE,replCI=10000, alpha=0.05){
   out
 }
 
-pairwiseLDBase <- function(XNx, data, markersPair, GA){
-  mle <- MLEPluginChoice(XNx, GA, plugin=NULL)
+pairwiseLDBase <- function(dataset, data, markersPair, GA){
+  mle <- MLEPluginChoice(dataset, GA, plugin=NULL)
   freqEstim <- mle[[2]]
   freqEstim <- labelFreqEstim(data, freqEstim, markersPair)
   freqEstim <- as.data.frame(freqEstim)
@@ -982,13 +983,13 @@ PREV <- function(data, markers, idExists=TRUE, plugin=NULL, isCI=FALSE, replCI=1
   XNx  <- datasetXNx(dataset)
 
   ### Dropping Missing data in dataset
-  missData <- rowSums(dataset == 0) > 0
-  dataset <- dataset[!missData,]
+  #missData <- rowSums(dataset == 0) > 0
+  #dataset <- dataset[!missData,]
   X <- XNx[[1]]
   Nx <- XNx[[2]]
   nLoci <- ncol(X)
 
-  mle <- MLEPluginChoice(XNx, GA, plugin=NULL)
+  mle <- MLEPluginChoice(dataset, GA, plugin=NULL)
   mle <- prev0(mle)
 
   mixRadCumProd <- c(1, cumprod(GA)[1:(nLoci-1)])
@@ -1027,8 +1028,8 @@ PREV <- function(data, markers, idExists=TRUE, plugin=NULL, isCI=FALSE, replCI=1
     rownames(arrayBootEstim) <- c('lambda',(rnames1+1))
     #observation <- seq_along(Nx)
     for (bootRepl in 1:replCI){
-      bootstrappedListOfDatasets <- bootstrapDataset(X, N, probaObs)
-      bootEstim <- prev0(MLEPluginChoice(bootstrappedListOfDatasets, GA, plugin=plugin))
+      bootDataset <- bootstrapDataset(X, N, probaObs)
+      bootEstim <- prev0(MLEPluginChoice(bootDataset, GA, plugin=plugin))
       hap    <- as.integer(rownames(bootEstim[[2]]))
       arrayBootEstim[1,bootRepl]  <- unlist(bootEstim[[1]])
       arrayBootEstim[as.character(hap),bootRepl] <- unlist(bootEstim[[2]])
