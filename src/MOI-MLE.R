@@ -2,11 +2,17 @@
 # Objective    : Contains implementation of the model (EM-algorithm) and supporting functions
 # Created by   : Christian Tsoungui Obama, Kristan. A. Schneider
 # Created on   : 15.08.23
-# Last modified: 11.01.25
+# Last modified: 18.02.25
 
+# Check and install required libraries if necessary
 if (!requireNamespace("openxlsx", quietly = TRUE)) {
   install.packages("openxlsx")
+}else if (!requireNamespace("Rmpfr", quietly = TRUE)) {
+   install.packages("Rmpfr")
 }
+
+# Load library for high precision calculations
+library(Rmpfr)
 
 MLE <- function(data, markers, plugin=NULL, isCI=FALSE, isBC=FALSE, replBC=10000, replCI=10000, alpha=0.05, allelesName=TRUE){
   dat <- datasetFormat(data, 2:ncol(data))
@@ -91,9 +97,6 @@ MLE <- function(data, markers, plugin=NULL, isCI=FALSE, isBC=FALSE, replBC=10000
 }
 
 MLEBC <- function(data, GA, isBC=FALSE, replBC=10000, plugin=NULL){
-  #isMissingData <- rowSums(data == 0) == 0
-  #data <- data[isMissingData,]
-  #NEff <- nrow(data)
   mle <- MLEPluginChoice(data, GA, plugin=plugin)
   hap <- as.numeric(rownames(mle[[2]])) - 1
   nHaplotypes <- length(mle[[2]])
@@ -214,6 +217,8 @@ baseModel <- function(data, GA){
   num0 <- pp*0
   cond1 <- 1  ## condition to stop EM alg! 
   la <- 2
+  #TODO: Add the logic with la.start
+  la.start <- la
   num <- num0
   rownames(num) <- hapl1
   Bcoeff <- num0
@@ -239,8 +244,30 @@ baseModel <- function(data, GA){
           lap <- la*p
           exlap <- vz*exp(lap)
           denom <- denom + exlap-vz 
-          num[Ax[[u]][[4]][[k]],] <- num[Ax[[u]][[4]][[k]],]+ exlap
+          #--------------
+          ## When indexing only one haplotype, array num turns into list 
+          ## Solution --> convert from high precision to numeric with asNumeric()
+          ##for compatibility before adding
+          num[Ax[[u]][[4]][[k]],] <- num[Ax[[u]][[4]][[k]],] + asNumeric(exlap)[[1]]#+ exlap
           CC <- CC + exlap*p
+        }
+        #--------------
+        ## When denom = 0 due to very low frequencies p, the calculation starts
+        ## over by converting the variable to 256 bits (might use less) high 
+        ## precision variables using mpfr()
+        if(denom == 0){
+          denom <- mpfr(0, precBits = 256)
+          num <- mpfr(num0, precBits = 256)
+          CC <- mpfr(0, precBits = 256)
+          for(k in 1:Ax[[u]][[1]]){
+            p <- sum(mpfr(pp[Ax[[u]][[4]][[k]],], precBits = 256))
+            vz <- mpfr(Ax[[u]][[3]][[k]], precBits = 256)
+            lap <- mpfr(la, precBits = 256)*p
+            exlap <- vz*exp(lap)
+            denom <- denom + exlap-vz 
+            num[Ax[[u]][[4]][[k]],] <- num[Ax[[u]][[4]][[k]],]+ exlap
+            CC <- CC + exlap*p
+          }
         }
         num <- num*pp
         denom <- Nx[u]/denom
@@ -263,22 +290,22 @@ baseModel <- function(data, GA){
       cond1 <- abs(xt-la) + sqrt(sum((pp-ppn)^2))
       la <- xt
       pp <- ppn
-      if(stp == 120 & attemp < 50 ){ # if algorithm dod not converge within 120 steps try new initial condition
-        attemp <- attemp + 1
-        stp <- 0
-        # new initial conditions
-        
-        tmp <- table(unlist(rep(lapply(Ax, function(x) x[[4]][[length(x[[4]])]]),Nx)))
-        
-        pp[names(tmp),] <- tmp/sum(tmp)
-        num0 <- pp*0
-        cond1 <- 1  ## condition to stop EM alg! 
-        la <- 2 + attemp
-        num <- num0
-        rownames(num) <- hapl1
-        Bcoeff <- num0
-        rownames(Bcoeff) <- hapl1
-      }
+      if(stp == 120 & attemp < 50 & (la>la.start) ){
+          attemp <- attemp + 1
+          stp <- 0
+          # new initial conditions
+          tmp <- table(unlist(rep(lapply(Ax, function(x) x[[4]][[length(x[[4]])]]),Nx)))
+          
+          pp[names(tmp),] <- tmp/sum(tmp)
+          num0 <- pp*0
+          cond1 <- 1  ## condition to stop EM alg! 
+          la <- 2 + attemp
+          la.start <- la
+          num <- num0
+          rownames(num) <- hapl1
+          Bcoeff <- num0
+          rownames(Bcoeff) <- hapl1
+        }
     }
   }else{
     la <- 0
@@ -292,7 +319,6 @@ baseModel <- function(data, GA){
 bootstrapDataset <- function(X, N, probaObs){
   bootSamples <- rmultinom(1, N, probaObs)
   bootDataset <- X[rep(1:nrow(X),bootSamples),]
-  #bootDataset  <- datasetXNx(bootDataset)
   bootDataset
 }
 
@@ -983,8 +1009,6 @@ PREV <- function(data, markers, idExists=TRUE, plugin=NULL, isCI=FALSE, replCI=1
   XNx  <- datasetXNx(dataset)
 
   ### Dropping Missing data in dataset
-  #missData <- rowSums(dataset == 0) > 0
-  #dataset <- dataset[!missData,]
   X <- XNx[[1]]
   Nx <- XNx[[2]]
   nLoci <- ncol(X)
@@ -1026,7 +1050,6 @@ PREV <- function(data, markers, idExists=TRUE, plugin=NULL, isCI=FALSE, replCI=1
     probaObs  <- Nx/N
     arrayBootEstim <- array(0, dim = c((nHap+1), replCI=replCI))
     rownames(arrayBootEstim) <- c('lambda',(rnames1+1))
-    #observation <- seq_along(Nx)
     for (bootRepl in 1:replCI){
       bootDataset <- bootstrapDataset(X, N, probaObs)
       bootEstim <- prev0(MLEPluginChoice(bootDataset, GA, plugin=plugin))
@@ -1074,7 +1097,6 @@ dGdL <- function(lambda, freq){
 
   freq*elp/elmo - el*(elp - 1)/(elmo^2)
 }
-
 
 dPsi <- function(lambda){
   eml <- 1-exp(-lambda)
