@@ -2,7 +2,7 @@
 # Objective    : Contains implementation of the model (EM-algorithm) and supporting functions
 # Created by   : Christian Tsoungui Obama, Kristan. A. Schneider
 # Created on   : 15.08.23
-# Last modified: 18.02.25
+# Last modified: 05.03.26
 
 # Check and install required libraries if necessary
 if (!requireNamespace("openxlsx", quietly = TRUE)) {
@@ -16,13 +16,14 @@ library(Rmpfr)
 
 MLE <- function(data, markers, plugin=NULL, isCI=FALSE, isBC=FALSE, replBC=10000, replCI=10000, alpha=0.05, allelesName=TRUE){
   dat <- datasetFormat(data, 2:ncol(data))
-  dataset <- dat[[1]][,markers]
+  
+  dataset <- dat[[1]][,markers, drop = FALSE]
   alleleList <- dat[[2]][markers]
   GA <- dat[[3]][markers]
 
   ### Dropping Missing data in dataset
   missData <- rowSums(dataset == 0) > 0
-  dataset <- dataset[!missData,]
+  dataset <- dataset[!missData, , drop = FALSE]
 
   ### Actual sample size
   Neff <- nrow(dataset)
@@ -409,11 +410,11 @@ datasetXNx <- function(data){
   X <- t(sapply(Nx.names, function(x) unlist(strsplit(x,"-")) ))
   rownames(X) <- NULL
   X <- array(as.numeric(X),dim(X))
-
+  
   # Removing samples with missing information
   sel <- rowSums(X==0)==0
   Nx <- Nx[sel]
-  X <- X[sel,]
+  X <- X[sel, ]
 
   out <- list(X, Nx)
   names(out) <- c('Observations', 'Observations_count')
@@ -469,35 +470,54 @@ cPoiss <- function(lambda,N){
   out
 }
 
-datasetFormat <- function(data, markers){
+datasetFormat <- function(dataset, markers){
   ### dataset... is the input data in standard format of package MLMOI, 1 st column contains smaple IDs
   ### markers ... vector of columms containing markers to be included
-
-  allele.list <- sapply(as.list(data[,markers]), function(x){
-    y <- sort(unique(x))
-    y[!is.na(y)]
-  }
-  )
-
+  
+  # Using sapply here might lead to allele.list being a matrix if all the markers
+  # have exactly the same number of alleles. It is safer to use lapply as it always returns 
+  # a list
+  allele.list <- lapply(as.list(dataset[,markers, drop = FALSE]), 
+                        function(x){
+                            y <- sort(unique(x))
+                            y[!is.na(y)]
+                          }
+                        )
+  
   ###number of alleles per marker########
   allele.num <- unlist(lapply(allele.list,length))
-
+  
   #### split data b sample ID
-  dataset.split <- split(data[,markers],data[,1])
+  dataset.split <- split(dataset[,markers, drop = FALSE],
+                         dataset[,1, drop = FALSE])
 
   #### Binary representation of allele being absent and present
-  samples.coded <- t(sapply(dataset.split, function(x){
+  if(length(markers) == 1){
+    samples.coded <- as.matrix(sapply(dataset.split, function(x){
       mapply(function(x,y,z){
-          as.integer(is.element(y,x)) %*% 2^(0:(z-1))
-        },
-          x,
-          allele.list,
-          allele.num
-        )
-      }
+        as.integer(is.element(y,x)) %*% 2^(0:(z-1))
+      },
+      x,
+      allele.list,
+      allele.num
+      )
+    }
     )
-  )
-  #names(allele.num) <- paste0('m',1:length(allele.num))
+    , ncol = length(dataset.split)
+    )
+  }else{
+    samples.coded <- t(sapply(dataset.split, function(x){
+      mapply(function(x,y,z){
+        as.integer(is.element(y,x)) %*% 2^(0:(z-1))
+      },
+      x,
+      allele.list,
+      allele.num
+      )
+    }
+    )
+    )
+  }
   out <- list(samples.coded,allele.list,allele.num)
   names(out) <- c('dataset', 'alleles', 'genetic_architecture')
   out
@@ -764,13 +784,11 @@ FIPsiPrev <- function(data, markers, isObserv = FALSE){
   lambda <- mle[[1]]
   dgdl <- c(dGdL(lambda,mle[[2]]))
   dgdpi <- c(dGdPi(lambda,mle[[2]]))
-  tmpvec <- c(1/dPsi(lambda),dgdpi,1)
+  tmpvec <- c(dPsi(lambda),dgdpi,1)
   J <- matrix(diag(tmpvec), ncol=(nrow(mle[[2]])+2))
   J[2:(nrow(J)-1),1] <- dgdl
 
-  invJ <- solve(J)
-  
-  out <- invJ%*%solve(I)%*%t(invJ)
+  out <- J%*%solve(I)%*%t(J)
   round(out[-nrow(out), -ncol(out)],5)
 }
 
