@@ -2,21 +2,28 @@
 # Objective    : Contains implementation of the model (EM-algorithm) and supporting functions
 # Created by   : Christian Tsoungui Obama, Kristan. A. Schneider
 # Created on   : 15.08.23
-# Last modified: 11.01.25
+# Last modified: 05.03.26
 
+# Check and install required libraries if necessary
 if (!requireNamespace("openxlsx", quietly = TRUE)) {
   install.packages("openxlsx")
+}else if (!requireNamespace("Rmpfr", quietly = TRUE)) {
+   install.packages("Rmpfr")
 }
+
+# Load library for high precision calculations
+library(Rmpfr)
 
 MLE <- function(data, markers, plugin=NULL, isCI=FALSE, isBC=FALSE, replBC=10000, replCI=10000, alpha=0.05, allelesName=TRUE){
   dat <- datasetFormat(data, 2:ncol(data))
-  dataset <- dat[[1]][,markers]
+  
+  dataset <- dat[[1]][,markers, drop = FALSE]
   alleleList <- dat[[2]][markers]
   GA <- dat[[3]][markers]
 
   ### Dropping Missing data in dataset
   missData <- rowSums(dataset == 0) > 0
-  dataset <- dataset[!missData,]
+  dataset <- dataset[!missData, , drop = FALSE]
 
   ### Actual sample size
   Neff <- nrow(dataset)
@@ -62,10 +69,10 @@ MLE <- function(data, markers, plugin=NULL, isCI=FALSE, isBC=FALSE, replBC=10000
     probaObs  <- Nx/N
     arrayBootEstim <- array(0, dim = c((nHap+1), replCI=replCI))
     rownames(arrayBootEstim) <- c('lambda',(rnames1+1))
-    observation <- seq_along(Nx)
+    #observation <- seq_along(Nx)
     for (bootRepl in 1:replCI){
-      bootstrappedListOfDatasets <- bootstrapDataset(X, N, probaObs)
-      bootEstim <- MLEPluginChoice(bootstrappedListOfDatasets, GA, plugin=plugin)
+      bootDataset <- bootstrapDataset(X, N, probaObs)
+      bootEstim <- MLEBC(bootDataset, GA, isBC=isBC, replBC=replBC, plugin=plugin) #MLEPluginChoice(bootstrappedListOfDatasets, GA, plugin=plugin)
       hap    <- as.integer(rownames(bootEstim[[2]]))
       arrayBootEstim[1,bootRepl]  <- unlist(bootEstim[[1]])
       arrayBootEstim[as.character(hap),bootRepl] <- unlist(bootEstim[[2]])
@@ -91,16 +98,13 @@ MLE <- function(data, markers, plugin=NULL, isCI=FALSE, isBC=FALSE, replBC=10000
 }
 
 MLEBC <- function(data, GA, isBC=FALSE, replBC=10000, plugin=NULL){
-  isMissingData <- rowSums(data == 0) == 0
-  data <- data[isMissingData,]
-  NEff <- nrow(data)
-  dataset <- datasetXNx(data)
-  mle <- MLEPluginChoice(dataset, GA, plugin=plugin)
+  mle <- MLEPluginChoice(data, GA, plugin=plugin)
   hap <- as.numeric(rownames(mle[[2]])) - 1
   nHaplotypes <- length(mle[[2]])
+  dataset <- datasetXNx(data)
   X <- dataset[[1]]
   Nx  <- dataset[[2]]
-  isFreqZero <- round(mle[[2]],2)==0
+  isFreqZero <- round(mle[[2]],2)==0 ### TODO: check step is necessary
   if(isBC){
     N <- sum(Nx)
     probaObs <- Nx/N
@@ -115,7 +119,7 @@ MLEBC <- function(data, GA, isBC=FALSE, replBC=10000, plugin=NULL){
       arrayBootEstim[as.character(hapl),bootRepl] <- tempBootFreqEstim
     }
     meanValueOfEstimates <- rowSums(arrayBootEstim)/replBC
-    meanValueOfEstimates[-1][isFreqZero] <- 0
+    meanValueOfEstimates[-1][isFreqZero] <- 0  ### Is used here
     BCLambda      <- 2*mle[[1]][1] - meanValueOfEstimates[1]
     BCFrequencies <- 2*mle[[2]] - meanValueOfEstimates[-1]
     biasCorrectedEstimates <- list(BCLambda, BCFrequencies)
@@ -126,6 +130,7 @@ MLEBC <- function(data, GA, isBC=FALSE, replBC=10000, plugin=NULL){
 }
 
 MLEPluginChoice <- function(data, GA, plugin=NULL){
+  data <- datasetXNx(data)
   if(is.null(plugin)){
     out <- baseModel(data, GA)               # calculates the uncorrected estimate
   }else{
@@ -213,6 +218,8 @@ baseModel <- function(data, GA){
   num0 <- pp*0
   cond1 <- 1  ## condition to stop EM alg! 
   la <- 2
+  #TODO: Add the logic with la.start
+  la.start <- la
   num <- num0
   rownames(num) <- hapl1
   Bcoeff <- num0
@@ -238,8 +245,30 @@ baseModel <- function(data, GA){
           lap <- la*p
           exlap <- vz*exp(lap)
           denom <- denom + exlap-vz 
-          num[Ax[[u]][[4]][[k]],] <- num[Ax[[u]][[4]][[k]],]+ exlap
+          #--------------
+          ## When indexing only one haplotype, array num turns into list 
+          ## Solution --> convert from high precision to numeric with asNumeric()
+          ##for compatibility before adding
+          num[Ax[[u]][[4]][[k]],] <- num[Ax[[u]][[4]][[k]],] + asNumeric(exlap)[[1]]#+ exlap
           CC <- CC + exlap*p
+        }
+        #--------------
+        ## When denom = 0 due to very low frequencies p, the calculation starts
+        ## over by converting the variable to 256 bits (might use less) high 
+        ## precision variables using mpfr()
+        if(denom == 0){
+          denom <- mpfr(0, precBits = 256)
+          num <- mpfr(num0, precBits = 256)
+          CC <- mpfr(0, precBits = 256)
+          for(k in 1:Ax[[u]][[1]]){
+            p <- sum(mpfr(pp[Ax[[u]][[4]][[k]],], precBits = 256))
+            vz <- mpfr(Ax[[u]][[3]][[k]], precBits = 256)
+            lap <- mpfr(la, precBits = 256)*p
+            exlap <- vz*exp(lap)
+            denom <- denom + exlap-vz 
+            num[Ax[[u]][[4]][[k]],] <- num[Ax[[u]][[4]][[k]],]+ exlap
+            CC <- CC + exlap*p
+          }
         }
         num <- num*pp
         denom <- Nx[u]/denom
@@ -262,22 +291,22 @@ baseModel <- function(data, GA){
       cond1 <- abs(xt-la) + sqrt(sum((pp-ppn)^2))
       la <- xt
       pp <- ppn
-      if(stp == 120 & attemp < 50 ){ # if algorithm dod not converge within 120 steps try new initial condition
-        attemp <- attemp + 1
-        stp <- 0
-        # new initial conditions
-        
-        tmp <- table(unlist(rep(lapply(Ax, function(x) x[[4]][[length(x[[4]])]]),Nx)))
-        
-        pp[names(tmp),] <- tmp/sum(tmp)
-        num0 <- pp*0
-        cond1 <- 1  ## condition to stop EM alg! 
-        la <- 2 + attemp
-        num <- num0
-        rownames(num) <- hapl1
-        Bcoeff <- num0
-        rownames(Bcoeff) <- hapl1
-      }
+      if(stp == 120 & attemp < 50 & (la>la.start) ){
+          attemp <- attemp + 1
+          stp <- 0
+          # new initial conditions
+          tmp <- table(unlist(rep(lapply(Ax, function(x) x[[4]][[length(x[[4]])]]),Nx)))
+          
+          pp[names(tmp),] <- tmp/sum(tmp)
+          num0 <- pp*0
+          cond1 <- 1  ## condition to stop EM alg! 
+          la <- 2 + attemp
+          la.start <- la
+          num <- num0
+          rownames(num) <- hapl1
+          Bcoeff <- num0
+          rownames(Bcoeff) <- hapl1
+        }
     }
   }else{
     la <- 0
@@ -291,7 +320,6 @@ baseModel <- function(data, GA){
 bootstrapDataset <- function(X, N, probaObs){
   bootSamples <- rmultinom(1, N, probaObs)
   bootDataset <- X[rep(1:nrow(X),bootSamples),]
-  bootDataset  <- datasetXNx(bootDataset)
   bootDataset
 }
 
@@ -382,11 +410,11 @@ datasetXNx <- function(data){
   X <- t(sapply(Nx.names, function(x) unlist(strsplit(x,"-")) ))
   rownames(X) <- NULL
   X <- array(as.numeric(X),dim(X))
-
+  
   # Removing samples with missing information
   sel <- rowSums(X==0)==0
   Nx <- Nx[sel]
-  X <- X[sel,]
+  X <- X[sel, ]
 
   out <- list(X, Nx)
   names(out) <- c('Observations', 'Observations_count')
@@ -442,35 +470,54 @@ cPoiss <- function(lambda,N){
   out
 }
 
-datasetFormat <- function(data, markers){
+datasetFormat <- function(dataset, markers){
   ### dataset... is the input data in standard format of package MLMOI, 1 st column contains smaple IDs
   ### markers ... vector of columms containing markers to be included
-
-  allele.list <- sapply(as.list(data[,markers]), function(x){
-    y <- sort(unique(x))
-    y[!is.na(y)]
-  }
-  )
-
+  
+  # Using sapply here might lead to allele.list being a matrix if all the markers
+  # have exactly the same number of alleles. It is safer to use lapply as it always returns 
+  # a list
+  allele.list <- lapply(as.list(dataset[,markers, drop = FALSE]), 
+                        function(x){
+                            y <- sort(unique(x))
+                            y[!is.na(y)]
+                          }
+                        )
+  
   ###number of alleles per marker########
   allele.num <- unlist(lapply(allele.list,length))
-
+  
   #### split data b sample ID
-  dataset.split <- split(data[,markers],data[,1])
+  dataset.split <- split(dataset[,markers, drop = FALSE],
+                         dataset[,1, drop = FALSE])
 
   #### Binary representation of allele being absent and present
-  samples.coded <- t(sapply(dataset.split, function(x){
+  if(length(markers) == 1){
+    samples.coded <- as.matrix(sapply(dataset.split, function(x){
       mapply(function(x,y,z){
-          as.integer(is.element(y,x)) %*% 2^(0:(z-1))
-        },
-          x,
-          allele.list,
-          allele.num
-        )
-      }
+        as.integer(is.element(y,x)) %*% 2^(0:(z-1))
+      },
+      x,
+      allele.list,
+      allele.num
+      )
+    }
     )
-  )
-  #names(allele.num) <- paste0('m',1:length(allele.num))
+    , ncol = length(dataset.split)
+    )
+  }else{
+    samples.coded <- t(sapply(dataset.split, function(x){
+      mapply(function(x,y,z){
+        as.integer(is.element(y,x)) %*% 2^(0:(z-1))
+      },
+      x,
+      allele.list,
+      allele.num
+      )
+    }
+    )
+    )
+  }
   out <- list(samples.coded,allele.list,allele.num)
   names(out) <- c('dataset', 'alleles', 'genetic_architecture')
   out
@@ -483,14 +530,14 @@ pairwiseLD <- function(data, markersPair, isCI=FALSE,replCI=10000, alpha=0.05){
   X <- XNx[[1]]
   GA <- data[[3]][markersPair]
   Nx <- XNx[[2]]
-  ldEstim <- pairwiseLDBase(XNx,data,markersPair, GA)
+  ldEstim <- pairwiseLDBase(data[[1]][,markersPair],data,markersPair, GA)
 
   # Bootstrap CIs
   if(isCI){
     N <- sum(Nx)
     probaObs <- Nx/N
     arrayBootEstim <- array(0, dim = c(2, replCI))
-    observation <- seq_along(Nx)
+    #observation <- seq_along(Nx)
     for (bootRepl in 1:replCI){
       bootDataset <- bootstrapDataset(X, N, probaObs)
       bootEstim <- pairwiseLDBase(bootDataset,data,markersPair,GA)
@@ -508,8 +555,8 @@ pairwiseLD <- function(data, markersPair, isCI=FALSE,replCI=10000, alpha=0.05){
   out
 }
 
-pairwiseLDBase <- function(XNx, data, markersPair, GA){
-  mle <- MLEPluginChoice(XNx, GA, plugin=NULL)
+pairwiseLDBase <- function(dataset, data, markersPair, GA){
+  mle <- MLEPluginChoice(dataset, GA, plugin=NULL)
   freqEstim <- mle[[2]]
   freqEstim <- labelFreqEstim(data, freqEstim, markersPair)
   freqEstim <- as.data.frame(freqEstim)
@@ -737,13 +784,11 @@ FIPsiPrev <- function(data, markers, isObserv = FALSE){
   lambda <- mle[[1]]
   dgdl <- c(dGdL(lambda,mle[[2]]))
   dgdpi <- c(dGdPi(lambda,mle[[2]]))
-  tmpvec <- c(1/dPsi(lambda),dgdpi,1)
+  tmpvec <- c(dPsi(lambda),dgdpi,1)
   J <- matrix(diag(tmpvec), ncol=(nrow(mle[[2]])+2))
   J[2:(nrow(J)-1),1] <- dgdl
 
-  invJ <- solve(J)
-  
-  out <- invJ%*%solve(I)%*%t(invJ)
+  out <- J%*%solve(I)%*%t(J)
   round(out[-nrow(out), -ncol(out)],5)
 }
 
@@ -982,13 +1027,11 @@ PREV <- function(data, markers, idExists=TRUE, plugin=NULL, isCI=FALSE, replCI=1
   XNx  <- datasetXNx(dataset)
 
   ### Dropping Missing data in dataset
-  missData <- rowSums(dataset == 0) > 0
-  dataset <- dataset[!missData,]
   X <- XNx[[1]]
   Nx <- XNx[[2]]
   nLoci <- ncol(X)
 
-  mle <- MLEPluginChoice(XNx, GA, plugin=NULL)
+  mle <- MLEPluginChoice(dataset, GA, plugin=NULL)
   mle <- prev0(mle)
 
   mixRadCumProd <- c(1, cumprod(GA)[1:(nLoci-1)])
@@ -1025,10 +1068,9 @@ PREV <- function(data, markers, idExists=TRUE, plugin=NULL, isCI=FALSE, replCI=1
     probaObs  <- Nx/N
     arrayBootEstim <- array(0, dim = c((nHap+1), replCI=replCI))
     rownames(arrayBootEstim) <- c('lambda',(rnames1+1))
-    #observation <- seq_along(Nx)
     for (bootRepl in 1:replCI){
-      bootstrappedListOfDatasets <- bootstrapDataset(X, N, probaObs)
-      bootEstim <- prev0(MLEPluginChoice(bootstrappedListOfDatasets, GA, plugin=plugin))
+      bootDataset <- bootstrapDataset(X, N, probaObs)
+      bootEstim <- prev0(MLEPluginChoice(bootDataset, GA, plugin=plugin))
       hap    <- as.integer(rownames(bootEstim[[2]]))
       arrayBootEstim[1,bootRepl]  <- unlist(bootEstim[[1]])
       arrayBootEstim[as.character(hap),bootRepl] <- unlist(bootEstim[[2]])
@@ -1073,7 +1115,6 @@ dGdL <- function(lambda, freq){
 
   freq*elp/elmo - el*(elp - 1)/(elmo^2)
 }
-
 
 dPsi <- function(lambda){
   eml <- 1-exp(-lambda)

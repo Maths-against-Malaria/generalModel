@@ -4,10 +4,10 @@
 #                from genomic/molecular data
 # Created by   : Christian Tsoungui Obama
 # Created on   : 27.10.23
-# Last modified: 11.01.25
+# Last modified: 19.02.25
 
 # Load external resources
-source('/Users/christian/Documents/Phd/models/generalModel/src/MOI-MLE.R')
+source('/home/johndoe/documents/src/MOI-MLE.R')
 
 # Load libraries
 library(openxlsx)
@@ -15,7 +15,7 @@ library(openxlsx)
 #################################
 ### Import Datasets
 ##################################
-data <- read.xlsx('/Users/christian/Documents/Phd/models/generalModel/exampleDataset/dataset.xlsx', 1)
+data <- read.xlsx('/home/johndoe/documents/exampleDataset/dataset.xlsx', 1)
 
 #################################
 ### Estimate MLEs
